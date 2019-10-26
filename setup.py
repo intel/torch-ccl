@@ -9,15 +9,13 @@ ext_modules = [
     CppExtension(
         'ccl', ['ProcessGroupCCL.cpp'],
         include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT"))],
-        #extra_link_args=['-Wl,-Bstatic', '-lccl', '-Wl,-Bdynamic'],
-        libraries=['ccl'],
-        library_dirs=['{}/lib/'.format(os.getenv("CCL_ROOT"))]
+        library_dirs=['{}/lib/'.format(os.getenv("CCL_ROOT"))],
+        libraries=['ccl']
         )
 ]
 
 setup(
-    name='pytorch_ccl',
+    name='ccl',
     version='1.0',
     ext_modules=ext_modules,
     cmdclass={'build_ext': BuildExtension})
-

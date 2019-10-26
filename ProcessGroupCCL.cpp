@@ -2,7 +2,8 @@
 
 #include <map>
 
-namespace c10d {
+namespace c10d
+{
 
 #define USE_VECTOR_ALLGATHERV
 
@@ -29,7 +30,8 @@ namespace c10d {
 namespace {
 
 // Op mapping
-std::map<ReduceOp, ccl::reduction> cclOp = {
+std::map<ReduceOp, ccl::reduction> cclOps =
+{
     {ReduceOp::MIN, ccl::reduction::min},
     {ReduceOp::MAX, ccl::reduction::max},
     {ReduceOp::SUM, ccl::reduction::sum},
@@ -37,7 +39,8 @@ std::map<ReduceOp, ccl::reduction> cclOp = {
 };
 
 // Type mapping
-std::map<at::ScalarType, ccl::data_type> cclDatatype = {
+std::map<at::ScalarType, ccl::data_type> cclDatatypes =
+{
     {at::kByte, ccl::data_type::dt_char},
     {at::kChar, ccl::data_type::dt_char},
     {at::kDouble, ccl::data_type::dt_double},
@@ -47,359 +50,386 @@ std::map<at::ScalarType, ccl::data_type> cclDatatype = {
     {at::kLong, ccl::data_type::dt_int64}
 };
 
+static std::once_flag cclInitOnceFlag;
+static std::mutex globalMutex;
+static ccl::communicator_t globalComm;
+static ccl::coll_attr collAttr;
+
 // Checking the input tensor's validity
-void checkSingleTensorHelper(const at::Tensor& tensor) {
-  if (!tensor.is_contiguous()) {
-      throw std::runtime_error("input tensor has to be contiguous");
-  }
-  if (tensor.is_sparse()) {
-      throw std::runtime_error("input tensor has to be dense");
-  }
-  if (tensor.is_cuda()) {
-      throw std::runtime_error(
-          "CUDA tensor detected and CCL doesn't support CUDA buffers");
-  }
-  if (tensor.numel() < 0) {
-      throw std::runtime_error("input tensor numel should be non-negative");
-  }
-}
-
-void checkRank(int rank, int size) {
-  if (rank < 0 || rank >= size) {
-      throw std::runtime_error("unexpected rank");
-  }
-}
-
-void checkSingleTensor(const std::vector<at::Tensor>& tensors) {
-  if (tensors.size() != 1) {
-    throw std::runtime_error(
-        "CCL process group does not support multi-GPU collectives");
-  }
-  checkSingleTensorHelper(tensors[0]);
-}
-
-void checkSameSizeAndType(
-    const at::Tensor& tensor,
-    const std::vector<at::Tensor>& tensors) {
-  for (size_t i = 0; i < tensors.size(); ++i) {
-    if ((tensors[i].numel() != tensor.numel()) ||
-        (tensors[i].type() != tensor.type())) {
-      throw std::runtime_error("Tensors are not equal in size or data type");
+void checkSingleTensorHelper(const at::Tensor& tensor)
+{
+    if (!tensor.is_contiguous())
+    {
+        throw std::runtime_error("input tensor has to be contiguous");
     }
-    checkSingleTensorHelper(tensors[i]);
-  }
+
+    if (tensor.is_sparse())
+    {
+        throw std::runtime_error("input tensor has to be dense");
+    }
+
+    if (tensor.is_cuda())
+    {
+        throw std::runtime_error("CUDA tensor detected and CCL doesn't support CUDA buffers");
+    }
+
+    if (tensor.numel() < 0)
+    {
+        throw std::runtime_error("input tensor numel should be non-negative");
+    }
 }
 
-} // namespace
-
-ProcessGroupCCL::WorkCCL::~WorkCCL() {
-  if (request_.get()) {
-    std::cerr
-        << "Attempted destruction of WorkCCL before work has completed, "
-        << "terminating the program." << std::endl;
-    std::terminate();
-  }
+void checkRank(int rank, int size)
+{
+    if (rank < 0 || rank >= size)
+    {
+        throw std::runtime_error("unexpected rank");
+    }
 }
 
-bool ProcessGroupCCL::WorkCCL::isCompleted() {
-  if (!request_.get()) {
+void checkSingleTensor(const std::vector<at::Tensor>& tensors)
+{
+    if (tensors.size() != 1)
+    {
+        throw std::runtime_error(
+            "CCL process group does not support tensors count " + std::to_string(tensors.size()));
+    }
+    checkSingleTensorHelper(tensors[0]);
+}
+
+void checkSameSizeAndType(const at::Tensor& tensor,
+                          const std::vector<at::Tensor>& tensors)
+{
+    for (size_t i = 0; i < tensors.size(); ++i)
+    {
+        if ((tensors[i].numel() != tensor.numel()) ||
+            (tensors[i].type() != tensor.type()))
+        {
+            throw std::runtime_error("tensors are not equal in size or data type");
+        }
+        checkSingleTensorHelper(tensors[i]);
+    }
+}
+
+} // namespace c10d
+
+ProcessGroupCCL::WorkCCL::~WorkCCL()
+{
+    if (req.get())
+    {
+        std::cerr << "attempted destruction of WorkCCL before work has completed, "
+                  << "terminating the program."
+                  << std::endl;
+        std::terminate();
+    }
+}
+
+bool ProcessGroupCCL::WorkCCL::isCompleted()
+{
+    if (!req.get())
+    {
+        return true;
+    }
+
+    bool flag = false;
+
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(flag = req->test());
+
+    if (flag)
+    {
+        req.reset();
+        tensors.clear();
+    }
+
+    return flag;
+}
+
+bool ProcessGroupCCL::WorkCCL::isSuccess() const
+{
+    if (req.get())
+    {
+        throw std::runtime_error(
+            "invalid call to WorkCCL::isSuccess before work has completed");
+    }
     return true;
-  }
-
-  bool flag = false;
-
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(flag = request_->test());
-
-  if (flag) {
-    request_.reset();
-    tensors_.clear();
-  }
-
-  return flag;
 }
 
-bool ProcessGroupCCL::WorkCCL::isSuccess() const {
-  if (request_.get()) {
-    throw std::runtime_error(
-        "Invalid call to WorkCCL::isSuccess before work has completed");
-  }
-  return true;
+void ProcessGroupCCL::WorkCCL::wait()
+{
+    if (!req.get())
+    {
+        return;
+    }
+
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req->wait());
+    req.reset();
+    tensors.clear();
 }
 
-void ProcessGroupCCL::WorkCCL::wait() {
-  if (!request_.get()) {
-    return;
-  }
-
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(request_->wait());
-  request_.reset();
-  tensors_.clear();
+void ProcessGroupCCL::cclFini()
+{
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    globalComm.reset();
 }
 
-std::mutex ProcessGroupCCL::pgGlobalMutex_;
-std::once_flag ProcessGroupCCL::onceFlagInitCCL;
-ccl::environment* ProcessGroupCCL::cclEnv_ = nullptr;
-ccl::communicator_t ProcessGroupCCL::cclGlobalComm_;
-ccl::coll_attr ProcessGroupCCL::collAttr_;
-
-void ProcessGroupCCL::cclExit() {
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  cclGlobalComm_.reset();
-}
-
-void ProcessGroupCCL::initCCLOnce() {
-  // Initialize CCL environment
-  std::call_once(onceFlagInitCCL, []() {
+void ProcessGroupCCL::cclInitOnce()
+{
+    std::call_once(cclInitOnceFlag, []() {
 
 #ifdef USE_VECTOR_ALLGATHERV
-    /* to enable efficient allgatherv with recv buffers vector */
-    setenv("CCL_VECTOR_ALLGATHERV", "1", 1);
+      /* to enable efficient allgatherv with recv buffers vector */
+      setenv("CCL_VECTOR_ALLGATHERV", "1", 1);
 #endif
 
-    CCL_CHECK(cclEnv_ = &ccl::environment::instance());
-    CCL_CHECK(cclGlobalComm_ = cclEnv_->create_communicator());
-    /* TODO: user buffers can differ from call to call so disabling caching for now
-     To enable caching we need to have additional context from user like tensor_name */
-    collAttr_.to_cache = 0;
-    if (std::atexit(ProcessGroupCCL::cclExit)) {
-      throw std::runtime_error("Fail to register the CCL exit handler");
-    }
+      CCL_CHECK(globalComm = ccl::environment::instance().create_communicator());
+
+      /* caching requires additional context like tensor name so disabling it explicitly */
+      collAttr.to_cache = 0;
+
+      if (std::atexit(ProcessGroupCCL::cclFini))
+      {
+          throw std::runtime_error("failed to register the CCL exit handler");
+      }
   });
 }
 
-std::shared_ptr<ProcessGroup>
-ProcessGroupCCL::createProcessGroupCCL(const std::shared_ptr<Store>& store,
-                                       int rank,
-                                       int size,
-                                       const std::string& groupName) {
-  // Once initialization
-  initCCLOnce();
+std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
+    const std::shared_ptr<Store>& store,
+    int rank,
+    int size,
+    const std::string& groupName)
+{
+  cclInitOnce();
 
-  /* TODO:
-     clarify what scenarious we need to support in CCL with custom process groups
-     currently only cclGlobalComm_ is used
-  */
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-
-  if (rank != -1 && (rank < 0 || (size_t)rank != ProcessGroupCCL::cclGlobalComm_->rank()))
+  if (rank != -1 && (rank < 0 || (size_t)rank != globalComm->rank()))
   {
-      printf("rank %d, ccl_rank %zu\n", rank, ProcessGroupCCL::cclGlobalComm_->rank());
-      throw std::runtime_error("unexpected rank");
+      throw std::runtime_error("unexpected rank " + std::to_string(rank) +
+                               ", CCL rank " + std::to_string(globalComm->rank()));
   }
 
-  if (size != -1 && (size <= 0 || (size_t)size != ProcessGroupCCL::cclGlobalComm_->size()))
+  if (size != -1 && (size <= 0 || (size_t)size != globalComm->size()))
   {
-      printf("size %d, ccl_size %zu\n", size, ProcessGroupCCL::cclGlobalComm_->size());
-      throw std::runtime_error("unexpected size");
+      throw std::runtime_error("unexpected size " + std::to_string(size) +
+                               ", CCL size " + std::to_string(globalComm->size()));
   }
-
-  globalLock.unlock();
 
   return std::make_shared<ProcessGroupCCL>(rank, size);
 }
 
 ProcessGroupCCL::ProcessGroupCCL(int rank, int size)
-    : ProcessGroup(ProcessGroupCCL::cclGlobalComm_->rank(),
-                   ProcessGroupCCL::cclGlobalComm_->size()),
-      pgComm_(ProcessGroupCCL::cclGlobalComm_.get()) {}
+    : ProcessGroup(globalComm->rank(),
+                   globalComm->size()),
+      comm(globalComm.get())
+{}
 
 ProcessGroupCCL::~ProcessGroupCCL() {}
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     std::vector<at::Tensor>& tensors,
-    const BroadcastOptions& opts) {
-  checkSingleTensor(tensors);
-  checkRank(opts.rootRank, getSize());
+    const BroadcastOptions& opts)
+{
+    checkSingleTensor(tensors);
+    checkRank(opts.rootRank, getSize());
 
-  std::shared_ptr<ccl::request> req;
+    std::shared_ptr<ccl::request> req;
 
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(req = pgComm_->bcast(
-    tensors[0].data_ptr(),
-    (size_t)tensors[0].numel(),
-    cclDatatype.at(tensors[0].type().scalarType()),
-    (size_t)opts.rootRank,
-    &collAttr_));
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->bcast(tensors[0].data_ptr(),
+                                (size_t)tensors[0].numel(),
+                                cclDatatypes.at(tensors[0].type().scalarType()),
+                                (size_t)opts.rootRank,
+                                &collAttr));
 
-  return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     std::vector<at::Tensor>& tensors,
-    const AllreduceOptions& opts) {
-  checkSingleTensor(tensors);
+    const AllreduceOptions& opts)
+{
+    checkSingleTensor(tensors);
 
-  std::shared_ptr<ccl::request> req;
+    std::shared_ptr<ccl::request> req;
 
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(req = pgComm_->allreduce(
-    tensors[0].data_ptr(),
-    tensors[0].data_ptr(),
-    (size_t)tensors[0].numel(),
-    cclDatatype.at(tensors[0].type().scalarType()),
-    cclOp.at(opts.reduceOp),
-    &collAttr_));
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
+                                    tensors[0].data_ptr(),
+                                    (size_t)tensors[0].numel(),
+                                    cclDatatypes.at(tensors[0].type().scalarType()),
+                                    cclOps.at(opts.reduceOp),
+                                    &collAttr));
 
-  return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
     std::vector<at::Tensor>& tensors,
-    const AllreduceCoalescedOptions& opts) {
-  throw std::runtime_error(
-      "allreduce_coalesced is currently not supported with CCL");
+    const AllreduceCoalescedOptions& opts)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support allreduce_coalesced");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
     std::vector<at::Tensor>& tensors,
-    const ReduceOptions& opts) {
-  checkSingleTensor(tensors);
-  checkRank(opts.rootRank, getSize());
+    const ReduceOptions& opts)
+{
+    checkSingleTensor(tensors);
+    checkRank(opts.rootRank, getSize());
 
-  std::shared_ptr<ccl::request> req;
+    std::shared_ptr<ccl::request> req;
 
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(req = pgComm_->reduce(
-    tensors[0].data_ptr(),
-    tensors[0].data_ptr(),
-    (size_t)tensors[0].numel(),
-    cclDatatype.at(tensors[0].type().scalarType()),
-    cclOp.at(opts.reduceOp),
-    (size_t)opts.rootRank,
-    &collAttr_));
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->reduce(tensors[0].data_ptr(),
+                                 tensors[0].data_ptr(),
+                                 (size_t)tensors[0].numel(),
+                                 cclDatatypes.at(tensors[0].type().scalarType()),
+                                 cclOps.at(opts.reduceOp),
+                                 (size_t)opts.rootRank,
+                                 &collAttr));
 
-  return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::vector<std::vector<at::Tensor>>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
-    const AllgatherOptions& opts) {
-  checkSingleTensor(inputTensors);
+    const AllgatherOptions& opts)
+{
+    checkSingleTensor(inputTensors);
 
-  if (outputTensors.size() != 1) {
-    throw std::runtime_error(
-        "CCL process group only supports a single "
-        "tensor op");
-  }
+    if (outputTensors.size() != 1)
+    {
+        throw std::runtime_error(
+            "ProcessGroupCCL/allgather supports a single tensor op only");
+    }
 
-  if (static_cast<size_t>(size_) != outputTensors[0].size()) {
-    throw std::runtime_error(
-        "allgather: number of output tensors should equal "
-        "to the world size");
-  }
+    if (static_cast<size_t>(size_) != outputTensors[0].size())
+    {
+        throw std::runtime_error(
+            "ProcessGroupCCL/allgather: number of output tensors should equal "
+            "to the world size");
+    }
 
-  checkSameSizeAndType(inputTensors[0], outputTensors[0]);
+    checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
-  std::shared_ptr<ccl::request> req;
+    std::shared_ptr<ccl::request> req;
 
 #ifdef USE_VECTOR_ALLGATHERV
-  std::vector<void*> recvBuffers;
-  for (size_t idx = 0; idx < outputTensors[0].size(); idx++)
-    recvBuffers.push_back(outputTensors[0][idx].data_ptr());
+    std::vector<void*> recvBuffers;
+    recvBuffers.reserve(outputTensors.size()); 
+    std::transform(outputTensors[0].begin(), outputTensors[0].end(),
+                   std::back_inserter(recvBuffers), [](const at::Tensor& t) { return t.data_ptr(); } );
 #else
-  auto flatOutputTensor = newLikeFlat(outputTensors[0]);
+    auto flatOutputTensor = newLikeFlat(outputTensors[0]);
 #endif
-  std::vector<size_t> recvCounts(size_, inputTensors[0].numel());
+    std::vector<size_t> recvCounts(size_, inputTensors[0].numel());
 
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(req = pgComm_->allgatherv(
-    inputTensors[0].data_ptr(),
-    (size_t)inputTensors[0].numel(),
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
+                                     (size_t)inputTensors[0].numel(),
 #ifdef USE_VECTOR_ALLGATHERV
-    recvBuffers.data(),
+                                     recvBuffers.data(),
 #else
-    flatOutputTensor.data_ptr(),
+                                     flatOutputTensor.data_ptr(),
 #endif
-    (size_t*)recvCounts.data(),
-    cclDatatype.at(inputTensors[0].type().scalarType()),
-    &collAttr_));
+                                     (size_t*)recvCounts.data(),
+                                     cclDatatypes.at(inputTensors[0].type().scalarType()),
+                                     &collAttr));
 
 #ifndef USE_VECTOR_ALLGATHERV
-  req->wait();
-  for (size_t i = 0; i < outputTensors[0].size(); ++i) {
-    outputTensors[0][i].copy_(flatOutputTensor[i]);
-  }
+    req->wait();
+    for (size_t i = 0; i < outputTensors[0].size(); ++i)
+    {
+        outputTensors[0][i].copy_(flatOutputTensor[i]);
+    }
 #endif
 
-  auto ag_tensors = std::vector<at::Tensor>(outputTensors[0].begin(), outputTensors[0].end());
-  ag_tensors.emplace_back(inputTensors[0]);
-  return std::make_shared<ProcessGroupCCL::WorkCCL>(req, ag_tensors);
+    auto ag_tensors = std::vector<at::Tensor>(outputTensors[0].begin(), outputTensors[0].end());
+    ag_tensors.emplace_back(inputTensors[0]);
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(ag_tensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
-    const BarrierOptions& opts) {
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(pgComm_->barrier());
-  return std::make_shared<ProcessGroupCCL::WorkCCL>();
+    const BarrierOptions& opts)
+{
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(comm->barrier());
+    return std::make_shared<ProcessGroupCCL::WorkCCL>();
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     std::vector<std::vector<at::Tensor>>& /* unused */,
     std::vector<at::Tensor>& /* unused */,
-    const GatherOptions& /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support gather");
+    const GatherOptions& /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support gather");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     std::vector<at::Tensor>& /* unused */,
     std::vector<std::vector<at::Tensor>>& /* unused */,
-    const ScatterOptions& /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support scatter");
+    const ScatterOptions& /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support scatter");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
     std::vector<at::Tensor>& /* unused */,
     std::vector<std::vector<at::Tensor>>& /* unused */,
-    const ReduceScatterOptions& /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support reduce_scatter");
+    const ReduceScatterOptions& /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support reduce_scatter");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<at::Tensor>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
-    const AllToAllOptions& opts) {
-  checkSingleTensor(outputTensors);
-  checkSingleTensor(inputTensors);
-  //checkSameSizeAndType(inputTensors[0], outputTensors[0]);
+    const AllToAllOptions& opts)
+{
+    checkSingleTensor(outputTensors);
+    checkSingleTensor(inputTensors);
+    //checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
-  std::shared_ptr<ccl::request> req;
-  std::unique_lock<std::mutex> globalLock(pgGlobalMutex_);
-  CCL_CHECK(req = pgComm_->alltoall(
-    inputTensors[0].data_ptr(),
-    outputTensors[0].data_ptr(),
-    (size_t)outputTensors[0].numel() / size_,
-    cclDatatype.at(outputTensors[0].type().scalarType()),
-    &collAttr_));
+    std::shared_ptr<ccl::request> req;
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->alltoall(inputTensors[0].data_ptr(),
+                                   outputTensors[0].data_ptr(),
+                                   (size_t)outputTensors[0].numel() / size_,
+                                   cclDatatypes.at(outputTensors[0].type().scalarType()),
+                                   &collAttr));
 
-  auto a2a_tensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
-  return std::make_shared<ProcessGroupCCL::WorkCCL>(req, a2a_tensors);
+    auto a2a_tensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2a_tensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */,
-    int /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support send");
+    int /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support send");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */,
-    int /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support recv");
+    int /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support recv");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recvAnysource(
     std::vector<at::Tensor>& /* unused */,
-    int /* unused */) {
-  throw std::runtime_error("ProcessGroupCCL does not support recvAnysource");
+    int /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support recvAnysource");
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("ProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL, "ProcessGroupCCL");
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+{
+    m.def("ProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL, "ProcessGroupCCL");
 }
 
 } // namespace c10d

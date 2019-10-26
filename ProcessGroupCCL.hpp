@@ -1,7 +1,5 @@
 #pragma once
 
-#include <torch/extension.h>
-
 #include <deque>
 #include <exception>
 #include <memory>
@@ -13,10 +11,11 @@
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
-
 #include <ccl.hpp>
+#include <torch/extension.h>
 
-namespace c10d {
+namespace c10d
+{
 
 // WorkCCL is the state associated with a CCL operarion.
 //
@@ -31,40 +30,53 @@ namespace c10d {
 // other words, the size of the input Tensor vector should always be 1.
 //
 
-
 /* TODO: remove this after alltoall upstream into public PyTorch */
-struct AllToAllOptions {
-  std::chrono::milliseconds timeout = kUnsetTimeout;
+struct AllToAllOptions
+{
+    std::chrono::milliseconds timeout = kUnsetTimeout;
 };
 
-class ProcessGroupCCL : public ProcessGroup, public std::enable_shared_from_this<ProcessGroupCCL> {
- public:
+class ProcessGroupCCL : public ProcessGroup,
+                        public std::enable_shared_from_this<ProcessGroupCCL>
+{
 
-  class WorkCCL : public ProcessGroup::Work {
-   public:
+public:
 
-    WorkCCL() {}
+  class WorkCCL : public ProcessGroup::Work
+  {
+  public:
 
-    WorkCCL(std::shared_ptr<ccl::request> request,
-            std::vector<at::Tensor>& tensors) :
-        request_(request), tensors_(tensors)
-    {}
+      WorkCCL() {}
+      WorkCCL(std::shared_ptr<ccl::request> req,
+              const std::vector<at::Tensor>& tensors) :
+          req(req),
+          tensors(tensors)
+      {}
 
-    virtual ~WorkCCL();
+      template<class ...Args>
+      WorkCCL(std::shared_ptr<ccl::request> req,
+              Args&& ...args) :
+          req(req),
+          tensors(std::forward<Args>(args)...)
+      {}
 
-    bool isCompleted() override;
 
-    bool isSuccess() const override;
+      virtual ~WorkCCL();
 
-    void wait() override;
+      bool isCompleted() override;
+      bool isSuccess() const override;
+      void wait() override;
 
-   protected:
-    std::shared_ptr<ccl::request> request_;
+  protected:
+      std::shared_ptr<ccl::request> req;
 
-    /* keep references to tensors while operation is in progress */
-    std::vector<at::Tensor> tensors_;
+      /*
+          keep copy of tensors to incrememt tensor reference counters
+          while CCL operation is in progress
+      */
+      std::vector<at::Tensor> tensors;
 
-    friend class ProcessGroupCCL;
+      friend class ProcessGroupCCL;
   };
 
   explicit ProcessGroupCCL(int rank = -1, int size = -1);
@@ -114,7 +126,7 @@ class ProcessGroupCCL : public ProcessGroup, public std::enable_shared_from_this
   std::shared_ptr<ProcessGroup::Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const AllToAllOptions& opts = AllToAllOptions()) /*override*/;
+      const AllToAllOptions& opts = AllToAllOptions()) /* override */;
 
   std::shared_ptr<ProcessGroup::Work> send(
       std::vector<at::Tensor>& tensors,
@@ -130,24 +142,19 @@ class ProcessGroupCCL : public ProcessGroup, public std::enable_shared_from_this
       std::vector<at::Tensor>& tensor,
       int tag);
 
-  // Creating a new ProcessGroupCCL, will initiialize CCL if not initialized
-  static std::shared_ptr<ProcessGroup> createProcessGroupCCL(const std::shared_ptr<Store>& store,
-                                                             int rank,
-                                                             int size,
-                                                             const std::string& groupName = "");
+  // create a new ProcessGroupCCL and initialize CCL if not initialized
+  static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
+      const std::shared_ptr<Store>& store,
+      int rank,
+      int size,
+      const std::string& groupName = "");
 
  protected:
 
-  // Global states
-  static void initCCLOnce();
-  static void cclExit();
-  static std::once_flag onceFlagInitCCL;
-  static std::mutex pgGlobalMutex_;
-  static ccl::environment* cclEnv_;
-  static ccl::communicator_t cclGlobalComm_;
-  static ccl::coll_attr collAttr_;
+  static void cclInitOnce();
+  static void cclFini();
 
-  ccl::communicator* pgComm_;
+  ccl::communicator* comm;
 };
 
 } // namespace c10d

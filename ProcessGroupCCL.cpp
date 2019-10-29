@@ -166,6 +166,10 @@ void ProcessGroupCCL::WorkCCL::wait()
     tensors.clear();
 }
 
+#ifdef USE_VECTOR_ALLGATHERV
+thread_local std::vector<void*> ProcessGroupCCL::agRecvBuffers;
+#endif
+
 void ProcessGroupCCL::cclFini()
 {
     std::unique_lock<std::mutex> globalLock(globalMutex);
@@ -182,6 +186,10 @@ void ProcessGroupCCL::cclInitOnce()
 #endif
 
       CCL_CHECK(globalComm = ccl::environment::instance().create_communicator());
+
+#ifdef USE_VECTOR_ALLGATHERV
+      agRecvBuffers.reserve(globalComm->size());
+#endif
 
       if (std::atexit(ProcessGroupCCL::cclFini))
       {
@@ -217,11 +225,7 @@ ProcessGroupCCL::ProcessGroupCCL(int rank, int size)
     : ProcessGroup(globalComm->rank(),
                    globalComm->size()),
       comm(globalComm.get())
-{
-#ifdef USE_VECTOR_ALLGATHERV
-    agRecvBuffers.reserve(comm->size());
-#endif
-}
+{}
 
 ProcessGroupCCL::~ProcessGroupCCL() {}
 
@@ -313,21 +317,18 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 
     checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
-    std::shared_ptr<ccl::request> req;
-
-#ifndef USE_VECTOR_ALLGATHERV
-    auto flatOutputTensor = newLikeFlat(outputTensors[0]);
-#endif
-    std::vector<size_t> recvCounts(comm->size(), inputTensors[0].numel());
-
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-
 #ifdef USE_VECTOR_ALLGATHERV
     agRecvBuffers.clear();
     std::transform(outputTensors[0].begin(), outputTensors[0].end(),
                    std::back_inserter(agRecvBuffers), [](const at::Tensor& t) { return t.data_ptr(); } );
+#else
+    auto flatOutputTensor = newLikeFlat(outputTensors[0]);
 #endif
+    std::vector<size_t> recvCounts(comm->size(), inputTensors[0].numel());
 
+    std::shared_ptr<ccl::request> req;
+
+    std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
                                      (size_t)inputTensors[0].numel(),
 #ifdef USE_VECTOR_ALLGATHERV
@@ -396,6 +397,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     //checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
     std::shared_ptr<ccl::request> req;
+
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->alltoall(inputTensors[0].data_ptr(),
                                    outputTensors[0].data_ptr(),

@@ -159,7 +159,7 @@ public:
   ccl::communicator* comm;
 
 #ifdef USE_VECTOR_ALLGATHERV
-  std::vector<void*> agRecvBuffers;
+  static thread_local std::vector<void*> agRecvBuffers;
 #endif
 };
 

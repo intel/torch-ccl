@@ -5,8 +5,6 @@
 namespace c10d
 {
 
-#define USE_VECTOR_ALLGATHERV
-
 #define CCL_CHECK(cmd)                                                   \
   do {                                                                   \
     try {                                                                \
@@ -180,13 +178,10 @@ void ProcessGroupCCL::cclInitOnce()
 
 #ifdef USE_VECTOR_ALLGATHERV
       /* to enable efficient allgatherv with recv buffers vector */
-      setenv("CCL_VECTOR_ALLGATHERV", "1", 1);
+      setenv("CCL_ALLGATHERV_IOV", "1", 1);
 #endif
 
       CCL_CHECK(globalComm = ccl::environment::instance().create_communicator());
-
-      /* caching requires additional context like tensor name so disabling it explicitly */
-      collAttr.to_cache = 0;
 
       if (std::atexit(ProcessGroupCCL::cclFini))
       {
@@ -222,7 +217,11 @@ ProcessGroupCCL::ProcessGroupCCL(int rank, int size)
     : ProcessGroup(globalComm->rank(),
                    globalComm->size()),
       comm(globalComm.get())
-{}
+{
+#ifdef USE_VECTOR_ALLGATHERV
+    agRecvBuffers.reserve(comm->size());
+#endif
+}
 
 ProcessGroupCCL::~ProcessGroupCCL() {}
 
@@ -305,7 +304,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
             "ProcessGroupCCL/allgather supports a single tensor op only");
     }
 
-    if (static_cast<size_t>(size_) != outputTensors[0].size())
+    if (comm->size() != outputTensors[0].size())
     {
         throw std::runtime_error(
             "ProcessGroupCCL/allgather: number of output tensors should equal "
@@ -316,21 +315,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 
     std::shared_ptr<ccl::request> req;
 
-#ifdef USE_VECTOR_ALLGATHERV
-    std::vector<void*> recvBuffers;
-    recvBuffers.reserve(outputTensors.size()); 
-    std::transform(outputTensors[0].begin(), outputTensors[0].end(),
-                   std::back_inserter(recvBuffers), [](const at::Tensor& t) { return t.data_ptr(); } );
-#else
+#ifndef USE_VECTOR_ALLGATHERV
     auto flatOutputTensor = newLikeFlat(outputTensors[0]);
 #endif
-    std::vector<size_t> recvCounts(size_, inputTensors[0].numel());
+    std::vector<size_t> recvCounts(comm->size(), inputTensors[0].numel());
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
+
+#ifdef USE_VECTOR_ALLGATHERV
+    agRecvBuffers.clear();
+    std::transform(outputTensors[0].begin(), outputTensors[0].end(),
+                   std::back_inserter(agRecvBuffers), [](const at::Tensor& t) { return t.data_ptr(); } );
+#endif
+
     CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
                                      (size_t)inputTensors[0].numel(),
 #ifdef USE_VECTOR_ALLGATHERV
-                                     recvBuffers.data(),
+                                     agRecvBuffers.data(),
 #else
                                      flatOutputTensor.data_ptr(),
 #endif
@@ -338,17 +339,19 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
                                      cclDatatypes.at(inputTensors[0].type().scalarType()),
                                      &collAttr));
 
-#ifndef USE_VECTOR_ALLGATHERV
+#ifdef USE_VECTOR_ALLGATHERV
+    auto agTensors = std::vector<at::Tensor>(outputTensors[0].begin(), outputTensors[0].end());
+    agTensors.emplace_back(inputTensors[0]);
+#else
     req->wait();
     for (size_t i = 0; i < outputTensors[0].size(); ++i)
     {
         outputTensors[0][i].copy_(flatOutputTensor[i]);
     }
+    std::vector<at::Tensor> agTensors;
 #endif
 
-    auto ag_tensors = std::vector<at::Tensor>(outputTensors[0].begin(), outputTensors[0].end());
-    ag_tensors.emplace_back(inputTensors[0]);
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(ag_tensors));
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
@@ -396,12 +399,12 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->alltoall(inputTensors[0].data_ptr(),
                                    outputTensors[0].data_ptr(),
-                                   (size_t)outputTensors[0].numel() / size_,
+                                   (size_t)outputTensors[0].numel() / comm->size(),
                                    cclDatatypes.at(outputTensors[0].type().scalarType()),
                                    &collAttr));
 
-    auto a2a_tensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2a_tensors));
+    auto a2aTensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(

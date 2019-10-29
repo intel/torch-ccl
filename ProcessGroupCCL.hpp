@@ -14,6 +14,8 @@
 #include <ccl.hpp>
 #include <torch/extension.h>
 
+#define USE_VECTOR_ALLGATHERV
+
 namespace c10d
 {
 
@@ -155,6 +157,10 @@ public:
   static void cclFini();
 
   ccl::communicator* comm;
+
+#ifdef USE_VECTOR_ALLGATHERV
+  std::vector<void*> agRecvBuffers;
+#endif
 };
 
 } // namespace c10d

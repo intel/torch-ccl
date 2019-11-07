@@ -30,19 +30,19 @@ To install `pytoch-ccl`:
 3. Source Intel oneCCL environment.
 
 ```
-source <ccl_install_path>/bin/cclvars.sh
+$ source <ccl_install_path>/bin/cclvars.sh
 ```
 
 4. Install the `pytorch-ccl` pip package.
 
 ```
-    $ pip setup.py install 
+$ pip setup.py install 
 ```
 
 
 # Usage
 
-```
+```python
 import torch.nn.parallel
 import torch.distributed as dist
 

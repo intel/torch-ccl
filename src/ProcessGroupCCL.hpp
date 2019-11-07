@@ -33,10 +33,10 @@ namespace c10d
 //
 
 /* TODO: remove this after alltoall upstream into public PyTorch */
-/*struct AllToAllOptions
+struct AllToAllOptions
 {
     std::chrono::milliseconds timeout = kUnsetTimeout;
-};*/
+};
 
 class ProcessGroupCCL : public ProcessGroup,
                         public std::enable_shared_from_this<ProcessGroupCCL>
@@ -50,18 +50,14 @@ public:
 
       WorkCCL() {}
       WorkCCL(std::shared_ptr<ccl::request> req,
-              const std::vector<at::Tensor>& tensors,
-              std::string debug_str_ = "") :
-          ProcessGroup::Work(debug_str_),
+              const std::vector<at::Tensor>& tensors) :
           req(req),
           tensors(tensors)
       {}
 
       template<class ...Args>
       WorkCCL(std::shared_ptr<ccl::request> req,
-              Args&& ...args,
-              std::string debug_str_ = "") :
-          ProcessGroup::Work(debug_str_),
+              Args&& ...args) :
           req(req),
           tensors(std::forward<Args>(args)...)
       {}
@@ -132,7 +128,7 @@ public:
   std::shared_ptr<ProcessGroup::Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const AllToAllOptions& opts = AllToAllOptions()) override;
+      const AllToAllOptions& opts = AllToAllOptions()) /* override */;
 
   std::shared_ptr<ProcessGroup::Work> send(
       std::vector<at::Tensor>& tensors,

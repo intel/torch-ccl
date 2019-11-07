@@ -155,7 +155,6 @@ bool ProcessGroupCCL::WorkCCL::isSuccess() const
 
 void ProcessGroupCCL::WorkCCL::wait()
 {
-    RECORD_FUNCTION(std::string("WorkCCL_wait:") + debug_str_, std::vector<c10::IValue>(), -1);
     if (!req.get())
     {
         return;
@@ -253,22 +252,19 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     std::vector<at::Tensor>& tensors,
     const AllreduceOptions& opts)
 {
-    RECORD_FUNCTION("CCL_Allreduce", std::vector<c10::IValue>(), -1);
     checkSingleTensor(tensors);
 
     std::shared_ptr<ccl::request> req;
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
-//    if(!getenv("CCL_DUMMY_ALLREDUCE")) {
-        CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
+    CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
                                     tensors[0].data_ptr(),
                                     (size_t)tensors[0].numel(),
                                     cclDatatypes.at(tensors[0].type().scalarType()),
                                     cclOps.at(opts.reduceOp),
                                     &collAttr));
-//    }
 
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::string("allreduce_SZ:") + std::to_string(tensors[0].numel()));
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors);
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
@@ -304,7 +300,6 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::vector<at::Tensor>& inputTensors,
     const AllgatherOptions& opts)
 {
-    RECORD_FUNCTION("CCL_Allgather", std::vector<c10::IValue>(), -1);
     checkSingleTensor(inputTensors);
 
     if (outputTensors.size() != 1)
@@ -357,7 +352,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::vector<at::Tensor> agTensors;
 #endif
 
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors), std::string("allgather_SZ:") + std::to_string(inputTensors[0].numel()));
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
@@ -397,7 +392,6 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<at::Tensor>& inputTensors,
     const AllToAllOptions& opts)
 {
-    RECORD_FUNCTION("CCL_Alltoall", std::vector<c10::IValue>(), -1);
     checkSingleTensor(outputTensors);
     checkSingleTensor(inputTensors);
     //checkSameSizeAndType(inputTensors[0], outputTensors[0]);
@@ -412,7 +406,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
                                    &collAttr));
 
     auto a2aTensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors), std::string("alltoall_SZ:") + std::to_string(inputTensors[0].numel()/size_));
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(

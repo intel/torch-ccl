@@ -42,15 +42,13 @@ namespace c10d
         cmd;                                                         \
     }                                                                \
     catch (ccl::ccl_error& e) {                                      \
-        std::string err = "CCL error in: " + std::string(__FILE__) + \
-            ":" + std::to_string(__LINE__) +                         \
-            ", with error message: " + e.what();                     \
-        throw std::runtime_error(err);                               \
+        throw std::runtime_error("CCL error in: " +                  \
+            std::string(__FILE__) + ":" + std::to_string(__LINE__) + \
+            ", with error message: " + e.what());                    \
     }                                                                \
     catch (...) {                                                    \
-        std::string err = "unknown error in: " +                     \
-            std::string(__FILE__) + ":" + std::to_string(__LINE__);  \
-        throw std::runtime_error(err);                               \
+        throw std::runtime_error("unknown error in: " +              \
+            std::string(__FILE__) + ":" + std::to_string(__LINE__)); \
     }                                                                \
   } while (0)
 
@@ -138,11 +136,11 @@ void checkSameSizeAndType(const at::Tensor& tensor,
     }
 }
 
-} // namespace c10d
+} // namespace
 
 ProcessGroupCCL::WorkCCL::~WorkCCL()
 {
-    if (req.get())
+    if (req)
     {
         std::cerr << "attempted destruction of WorkCCL before work has completed, "
                   << "terminating the program."
@@ -153,7 +151,7 @@ ProcessGroupCCL::WorkCCL::~WorkCCL()
 
 bool ProcessGroupCCL::WorkCCL::isCompleted()
 {
-    if (!req.get())
+    if (!req)
     {
         return true;
     }
@@ -174,7 +172,7 @@ bool ProcessGroupCCL::WorkCCL::isCompleted()
 
 bool ProcessGroupCCL::WorkCCL::isSuccess() const
 {
-    if (req.get())
+    if (req)
     {
         throw std::runtime_error(
             "invalid call to WorkCCL::isSuccess before work has completed");
@@ -184,7 +182,7 @@ bool ProcessGroupCCL::WorkCCL::isSuccess() const
 
 void ProcessGroupCCL::WorkCCL::wait()
 {
-    if (!req.get())
+    if (!req)
     {
         return;
     }
@@ -210,7 +208,7 @@ void ProcessGroupCCL::cclInitOnce()
     std::call_once(cclInitOnceFlag, []() {
 
 #ifdef USE_VECTOR_ALLGATHERV
-      /* to enable efficient allgatherv with recv buffers vector */
+      /* to enable allgatherv with recv buffers vector */
       setenv("CCL_ALLGATHERV_IOV", "1", 1);
 #endif
 
@@ -235,13 +233,13 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 {
   cclInitOnce();
 
-  if (rank != -1 && (rank < 0 || (size_t)rank != globalComm->rank()))
+  if ((rank != -1) && (rank < 0 || (size_t)rank != globalComm->rank()))
   {
       throw std::runtime_error("unexpected rank " + std::to_string(rank) +
                                ", CCL rank " + std::to_string(globalComm->rank()));
   }
 
-  if (size != -1 && (size <= 0 || (size_t)size != globalComm->size()))
+  if ((size != -1) && (size <= 0 || (size_t)size != globalComm->size()))
   {
       throw std::runtime_error("unexpected size " + std::to_string(size) +
                                ", CCL size " + std::to_string(globalComm->size()));
@@ -423,7 +421,6 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
 {
     checkSingleTensor(outputTensors);
     checkSingleTensor(inputTensors);
-    //checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
     std::shared_ptr<ccl::request> req;
 

@@ -57,4 +57,4 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```
 
 # License
-[BSD License](https://github.com/intel/pytorch-ccl/blob/master/LICENSE>)
+[BSD License](https://github.com/intel/pytorch-ccl/blob/master/LICENSE)

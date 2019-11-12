@@ -7,17 +7,21 @@ if "CCL_ROOT" not in os.environ:
 
 ext_modules = [
     CppExtension(
-        'ccl', ['src/ProcessGroupCCL.cpp'],
+        name='ccl',
+        sources=['src/ProcessGroupCCL.cpp'],
         #include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT"))],
         # removed PYTORCH_ROOT related include after merge of PR https://github.com/pytorch/pytorch/pull/28068
         include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT")), '{}/torch/lib/'.format(os.getenv("PYTORCH_ROOT"))],
         library_dirs=['{}/lib/'.format(os.getenv("CCL_ROOT"))],
-        libraries=['ccl']
+        libraries=['ccl'],
+        extra_compile_args=['-Wformat', '-Wformat-security', '-D_FORTIFY_SOURCE=2', '-fstack-protector'],
+        extra_link_args=['-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now']
         )
 ]
 
 setup(
-    name='pytorch-ccl',
+    # update name after PR28068 upstream
+    name='ccl',
     version='1.0',
     ext_modules=ext_modules,
     cmdclass={'build_ext': BuildExtension})

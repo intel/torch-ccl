@@ -63,7 +63,6 @@ namespace c10d
 // other words, the size of the input Tensor vector should always be 1.
 //
 
-/* TODO: remove this after alltoall upstream into public PyTorch */
 struct AllToAllOptions
 {
     std::chrono::milliseconds timeout = kUnsetTimeout;
@@ -159,7 +158,7 @@ public:
   std::shared_ptr<ProcessGroup::Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const AllToAllOptions& opts = AllToAllOptions()) /* override */;
+      const AllToAllOptions& opts = AllToAllOptions());
 
   std::shared_ptr<ProcessGroup::Work> send(
       std::vector<at::Tensor>& tensors,

@@ -30,7 +30,7 @@ To install `pytoch-ccl`:
 3. Source Intel oneCCL environment.
 
 ```
-$ source <ccl_install_path>/env/cclvars.sh
+$ source <ccl_install_path>/env/setvars.sh
 ```
 
 4. Install the `pytorch-ccl` pip package.
@@ -59,7 +59,7 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```
 
 ```
-$ source <ccl_install_path>/env/cclvars.sh
+$ source <ccl_install_path>/env/setvars.sh
 $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 
 ```

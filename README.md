@@ -5,9 +5,9 @@ This repository holds Intel-maintained PyTorch bindings for Intel oneCCL.
 
 # Introduction
 
-PyTorch is an open-source machine learning [framework](https://github.com/pytorch/pytorch).
+[PyTorch](https://github.com/pytorch/pytorch) is an open-source machine learning framework.
 
-Intel oneCCL (collective commnication library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://github.com/intel/oneccl).
+[Intel oneCCL](https://github.com/intel/oneccl)(collective commnication library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://intel.github.io/oneccl).
 
 `pytorch-ccl` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup.
 
@@ -25,7 +25,7 @@ To install `pytoch-ccl`:
 
 1. Install PyTorch.
 
-2. Install Intel oneCCL (please refer to [this page](https://github.com/intel/oneccl)).
+2. Install Intel oneCCL (please refer to [this page](https://intel.github.io/oneccl/installation.html)).
 
 3. Source Intel oneCCL environment.
 

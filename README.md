@@ -1,4 +1,4 @@
-# pytorch-ccl
+# torch-ccl
 
 This repository holds PyTorch bindings maintained by Intel for the Intel® oneAPI Collective Communications Library (oneCCL).
 
@@ -7,9 +7,9 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 [PyTorch](https://github.com/pytorch/pytorch) is an open-source machine learning framework.
 
-[Intel oneCCL](https://github.com/intel/oneccl)(collective commnication library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://intel.github.io/oneccl).
+[Intel oneCCL](https://github.com/intel/oneccl) (collective commnication library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://intel.github.io/oneccl).
 
-The `pytorch-ccl` module implements the PyTorch C10D ProcessGroup API and can be dynamically loaded as an external ProcessGroup.
+`torch-ccl` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup.
 
 
 # Requirements
@@ -33,7 +33,7 @@ To install `pytoch-ccl`:
 $ source <ccl_install_path>/env/setvars.sh
 ```
 
-4. Install the `pytorch-ccl` pip package.
+4. Install the `torch-ccl` pip package.
 
 ```
 $ pip setup.py install 
@@ -66,4 +66,4 @@ $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 
 
 # License
-[BSD License](https://github.com/intel/pytorch-ccl/blob/master/LICENSE)
+[BSD License](https://github.com/intel/torch-ccl/blob/master/LICENSE)

@@ -79,6 +79,7 @@ static std::once_flag cclInitOnceFlag;
 static std::mutex globalMutex;
 static ccl::communicator_t globalComm;
 static ccl::coll_attr collAttr;
+static ccl::coll_attr collAttrAg;
 
 // Checking the input tensor's validity
 void checkSingleTensorHelper(const at::Tensor& tensor)
@@ -207,9 +208,15 @@ void ProcessGroupCCL::cclInitOnce()
 {
     std::call_once(cclInitOnceFlag, []() {
 
+#ifdef USE_CACHE
+      /* to enable collective caching */
+      collAttr.to_cache = 1;
+      collAttrAg.to_cache = 1;
+#endif
+
 #ifdef USE_VECTOR_ALLGATHERV
       /* to enable allgatherv with recv buffers vector */
-      setenv("CCL_ALLGATHERV_IOV", "1", 1);
+      collAttrAg.iov_buf = 1;
 #endif
 
       CCL_CHECK(globalComm = ccl::environment::instance().create_communicator());
@@ -263,6 +270,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     checkSingleTensor(tensors);
     checkRank(opts.rootRank, getSize());
 
+#ifdef USE_CACHE
+    collAttr.match_id = tensorName.c_str();
+#endif
+
     std::shared_ptr<ccl::request> req;
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
@@ -280,6 +291,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     const AllreduceOptions& opts)
 {
     checkSingleTensor(tensors);
+
+#ifdef USE_CACHE
+    collAttr.match_id = tensorName.c_str();
+#endif
 
     std::shared_ptr<ccl::request> req;
 
@@ -307,6 +322,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
 {
     checkSingleTensor(tensors);
     checkRank(opts.rootRank, getSize());
+
+#ifdef USE_CACHE
+    collAttr.match_id = tensorName.c_str();
+#endif
 
     std::shared_ptr<ccl::request> req;
 
@@ -344,6 +363,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 
     checkSameSizeAndType(inputTensors[0], outputTensors[0]);
 
+#ifdef USE_CACHE
+    collAttrAg.match_id = tensorName.c_str();
+#endif
+
 #ifdef USE_VECTOR_ALLGATHERV
     agRecvBuffers.clear();
     std::transform(outputTensors[0].begin(), outputTensors[0].end(),
@@ -365,7 +388,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 #endif
                                      (size_t*)recvCounts.data(),
                                      cclDatatypes.at(inputTensors[0].type().scalarType()),
-                                     &collAttr));
+                                     &collAttrAg));
 
 #ifdef USE_VECTOR_ALLGATHERV
     auto agTensors = std::vector<at::Tensor>(outputTensors[0].begin(), outputTensors[0].end());

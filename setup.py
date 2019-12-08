@@ -7,7 +7,7 @@ if "CCL_ROOT" not in os.environ:
 
 ext_modules = [
     CppExtension(
-        name="pytorch_ccl",
+        name="torch_ccl",
         sources=['src/ProcessGroupCCL.cpp'],
         include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT"))],
         library_dirs=['{}/lib/'.format(os.getenv("CCL_ROOT"))],
@@ -18,7 +18,7 @@ ext_modules = [
 ]
 
 setup(
-    name='pytorch-ccl',
+    name='torch-ccl',
     version='1.0',
     ext_modules=ext_modules,
     cmdclass={'build_ext': BuildExtension})

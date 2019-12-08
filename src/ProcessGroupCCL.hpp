@@ -46,6 +46,7 @@
 #include <torch/extension.h>
 
 #define USE_VECTOR_ALLGATHERV
+//#define USE_CACHE
 
 namespace c10d
 {

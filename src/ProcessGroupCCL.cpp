@@ -216,7 +216,7 @@ void ProcessGroupCCL::cclInitOnce()
 
 #ifdef USE_VECTOR_ALLGATHERV
       /* to enable allgatherv with recv buffers vector */
-      collAttrAg.iov_buf = 1;
+      collAttrAg.vector_buf = 1;
 #endif
 
       CCL_CHECK(globalComm = ccl::environment::instance().create_communicator());

@@ -69,8 +69,7 @@ struct AllToAllOptions
     std::chrono::milliseconds timeout = kUnsetTimeout;
 };
 
-class ProcessGroupCCL : public ProcessGroup,
-                        public std::enable_shared_from_this<ProcessGroupCCL>
+class ProcessGroupCCL : public ProcessGroup
 {
 
 public:
@@ -98,7 +97,8 @@ public:
 
       bool isCompleted() override;
       bool isSuccess() const override;
-      void wait() override;
+      bool wait() override;
+      void abort() override;
 
   protected:
       std::shared_ptr<ccl::request> req;
@@ -137,10 +137,11 @@ public:
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> barrier(
-      const BarrierOptions& opts = BarrierOptions()) override;
+  std::shared_ptr<ProcessGroup::Work> allgather_coalesced(
+      std::vector<std::vector<at::Tensor>>& outputTensorLists,
+      std::vector<at::Tensor>& inputTensors,
+      const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  // Unsupported Ops
   std::shared_ptr<ProcessGroup::Work> gather(
       std::vector<std::vector<at::Tensor>>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
@@ -175,12 +176,22 @@ public:
       std::vector<at::Tensor>& tensor,
       int tag);
 
+  std::shared_ptr<ProcessGroup::Work> barrier(
+      const BarrierOptions& opts = BarrierOptions()) override;
+
   // create a new ProcessGroupCCL and initialize CCL if not initialized
   static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
       const std::shared_ptr<Store>& store,
       int rank,
       int size,
       const std::string& groupName = "");
+
+  static void ProcessGroupCCLConstructor() __attribute__((constructor))
+  {
+      py::object register_new_backend =
+          py::module::import("torch.distributed").attr("Backend").attr("register_new_backend");
+      register_new_backend("torch_ccl", "createProcessGroupCCL");
+  }
 
  protected:
 

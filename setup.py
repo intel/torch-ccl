@@ -9,7 +9,7 @@ ext_modules = [
     CppExtension(
         name="torch_ccl",
         sources=['src/ProcessGroupCCL.cpp'],
-        include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT"))],
+        include_dirs=['{}/include/'.format(os.getenv("CCL_ROOT")), '{}/torch/lib'.format(os.getenv("PYTORCH_ROOT"))],
         library_dirs=['{}/lib/'.format(os.getenv("CCL_ROOT"))],
         libraries=['ccl'],
         extra_compile_args=['-Wformat', '-Wformat-security', '-D_FORTIFY_SOURCE=2', '-fstack-protector'],

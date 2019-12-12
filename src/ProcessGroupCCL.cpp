@@ -181,17 +181,25 @@ bool ProcessGroupCCL::WorkCCL::isSuccess() const
     return true;
 }
 
-void ProcessGroupCCL::WorkCCL::wait()
+bool ProcessGroupCCL::WorkCCL::wait()
 {
     if (!req)
     {
-        return;
+        return true;
     }
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req->wait());
     req.reset();
     tensors.clear();
+
+    // Always return true, because abort API is not implemented.
+    return true;
+}
+
+void ProcessGroupCCL::WorkCCL::abort()
+{
+    TORCH_CHECK(false, "ProcessGroupCCL::WorkCCL::abort not implemented.")
 }
 
 #ifdef USE_VECTOR_ALLGATHERV
@@ -310,8 +318,8 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
-    std::vector<at::Tensor>& tensors,
-    const AllreduceCoalescedOptions& opts)
+    std::vector<at::Tensor>& /* unused */,
+    const AllreduceCoalescedOptions& /* unused */)
 {
     throw std::runtime_error("ProcessGroupCCL does not support allreduce_coalesced");
 }
@@ -405,12 +413,12 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors));
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
-    const BarrierOptions& opts)
+std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
+    std::vector<std::vector<at::Tensor>>& /* unused */,
+    std::vector<at::Tensor>& /* unused */,
+    const AllgatherOptions& /* unused */)
 {
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(comm->barrier());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>();
+    throw std::runtime_error("ProcessGroupCCL does not support allgather_coalesced");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
@@ -481,9 +489,17 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recvAnysource(
     throw std::runtime_error("ProcessGroupCCL does not support recvAnysource");
 }
 
+std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
+    const BarrierOptions& opts)
+{
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(comm->barrier());
+    return std::make_shared<ProcessGroupCCL::WorkCCL>();
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-    m.def("ProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL, "ProcessGroupCCL");
+    m.def("createProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL);
 }
 
 } // namespace c10d

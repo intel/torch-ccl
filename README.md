@@ -21,7 +21,7 @@ Intel® oneAPI Collective Communications Library
 
 # Installation
 
-To install `pytoch-ccl`:
+To install `torch-ccl`:
 
 1. Install PyTorch.
 
@@ -48,6 +48,7 @@ example.py
 
 import torch.nn.parallel
 import torch.distributed as dist
+import torch_ccl
 
 ...
 

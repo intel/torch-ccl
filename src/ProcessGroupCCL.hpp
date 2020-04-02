@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Intel Corporation
+ * Copyright (c) 2020, Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,7 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <pybind11/chrono.h>
 #include <thread>
 #include <vector>
 
@@ -63,11 +64,6 @@ namespace c10d
 // Also note that ProcessGroupCCL only supports a single Tensor operation. In
 // other words, the size of the input Tensor vector should always be 1.
 //
-
-struct AllToAllOptions
-{
-    std::chrono::milliseconds timeout = kUnsetTimeout;
-};
 
 class ProcessGroupCCL : public ProcessGroup
 {
@@ -137,6 +133,11 @@ public:
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
+  std::shared_ptr<ProcessGroup::Work> allgather_base(
+      at::Tensor& outputBuffer,
+      at::Tensor& inputBuffer,
+      const AllgatherOptions& opts = AllgatherOptions()) override;
+
   std::shared_ptr<ProcessGroup::Work> allgather_coalesced(
       std::vector<std::vector<at::Tensor>>& outputTensorLists,
       std::vector<at::Tensor>& inputTensors,
@@ -157,24 +158,34 @@ public:
       std::vector<std::vector<at::Tensor>>& inputTensors,
       const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
 
+  std::shared_ptr<ProcessGroup::Work> alltoall_base(
+      at::Tensor& outputTensor,
+      at::Tensor& inputTensor,
+      std::vector<int64_t>& outputSplitSizes,
+      std::vector<int64_t>& inputSplitSizes,
+      const AllToAllOptions& opts = AllToAllOptions()) override;
+
   std::shared_ptr<ProcessGroup::Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const AllToAllOptions& opts = AllToAllOptions());
+      const AllToAllOptions& opts = AllToAllOptions()) override;
 
   std::shared_ptr<ProcessGroup::Work> send(
       std::vector<at::Tensor>& tensors,
       int dstRank,
-      int tag);
+      int tag) override;
 
   std::shared_ptr<ProcessGroup::Work> recv(
       std::vector<at::Tensor>& tensors,
       int srcRank,
-      int tag);
+      int tag) override;
 
   std::shared_ptr<ProcessGroup::Work> recvAnysource(
       std::vector<at::Tensor>& tensor,
-      int tag);
+      int tag) override;
+
+  std::shared_ptr<ProcessGroup::Work> barrier(
+      const BarrierOptions& opts = BarrierOptions()) override;
 
   std::shared_ptr<ProcessGroup::Work> barrier(
       const BarrierOptions& opts = BarrierOptions()) override;
@@ -184,7 +195,14 @@ public:
       const std::shared_ptr<Store>& store,
       int rank,
       int size,
-      const std::string& groupName = "");
+      const std::chrono::duration<float>& timeout);
+
+  static void ProcessGroupCCLConstructor() __attribute__((constructor))
+  {
+      py::object register_backend =
+          py::module::import("torch.distributed").attr("Backend").attr("register_backend");
+      register_backend("ccl", py::cpp_function(createProcessGroupCCL));
+  }
 
   static void ProcessGroupCCLConstructor() __attribute__((constructor))
   {

@@ -7,7 +7,7 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 [PyTorch](https://github.com/pytorch/pytorch) is an open-source machine learning framework.
 
-[Intel oneCCL](https://github.com/oneapi-src/oneCCL) (collective commnication library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://oneapi-src.github.io/oneCCL).
+[Intel oneCCL](https://github.com/oneapi-src/oneCCL) (collective commnications library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, bcast. For more information on oneCCL, please refer to the [oneCCL documentation](https://oneapi-src.github.io/oneCCL).
 
 `torch-ccl` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup.
 

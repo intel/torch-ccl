@@ -204,13 +204,6 @@ public:
       register_backend("ccl", py::cpp_function(createProcessGroupCCL));
   }
 
-  static void ProcessGroupCCLConstructor() __attribute__((constructor))
-  {
-      py::object register_new_backend =
-          py::module::import("torch.distributed").attr("Backend").attr("register_new_backend");
-      register_new_backend("torch_ccl", "createProcessGroupCCL");
-  }
-
  protected:
 
   static void cclInitOnce();

@@ -14,7 +14,7 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 # Requirements
 
-PyTorch (1.6.0 or newer).
+PyTorch (development version which includes external ProcessGroup [support](https://github.com/pytorch/pytorch/commit/762270c51faa845b3fbb5a6779813d537f48e2e8)).
 
 Intel® oneAPI Collective Communications Library (2021.1-beta05 or newer).
 

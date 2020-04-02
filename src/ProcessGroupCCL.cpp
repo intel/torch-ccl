@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Intel Corporation
+ * Copyright (c) 2020, Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -137,6 +137,85 @@ void checkSameSizeAndType(const at::Tensor& tensor,
     }
 }
 
+void checkSplitSizes(
+    const std::vector<int64_t>& split_sizes,
+    const at::Tensor& tensor,
+    int group_size)
+{
+    if (split_sizes.size() == 0)
+    {
+        TORCH_CHECK(
+            tensor.size(0) % group_size == 0,
+            "Tensor's dim 0 does not divide equally across group size");
+    }
+    else
+    {
+        TORCH_CHECK(
+            split_sizes.size() == (size_t)group_size,
+            "Number of tensor splits not equal to group size");
+        int sum = std::accumulate(split_sizes.begin(), split_sizes.end(), 0);
+        TORCH_CHECK(
+            sum == tensor.size(0), "Split sizes doesn't match total dim 0 size");
+    }
+}
+
+/*int64_t computeLengthsAndOffsets(
+    const std::vector<int64_t>& split_sizes,
+    const at::Tensor& tensor,
+    std::vector<int>* lengths,
+    std::vector<int>* offsets)
+{
+    int64_t group_size = lengths->size();
+    bool equal_splits = false;
+    int64_t dim0_size = tensor.size(0);
+    int64_t row_size = (dim0_size ? tensor.numel() / dim0_size : 1);
+    int64_t split_size = 0;
+    int64_t offset = 0;
+
+    if (split_sizes.size() == 0)
+    {
+        equal_splits = true;
+        split_size = tensor.size(0) / group_size;
+    }
+
+    for (int i = 0; i < group_size; i++)
+    {
+        int64_t length = row_size * (equal_splits ? split_size : split_sizes[i]);
+        TORCH_INTERNAL_ASSERT(
+            length <= std::numeric_limits<int>::max() &&
+                offset <= std::numeric_limits<int>::max(),
+            "Length or offset larger than INT_MAX not supported");
+        (*lengths)[i] = length;
+        (*offsets)[i] = offset;
+        offset += length;
+    }
+
+    return offset;
+}
+
+int64_t computeLengthsAndOffsets(
+    const std::vector<at::Tensor>& tensors,
+    std::vector<int>* lengths,
+    std::vector<int>* offsets)
+{
+    int64_t group_size = lengths->size();
+    int64_t offset = 0;
+
+    for (int i = 0; i < group_size; i++)
+    {
+        int64_t length = tensors[i].numel();
+        TORCH_INTERNAL_ASSERT(
+            length <= std::numeric_limits<int>::max() &&
+                offset <= std::numeric_limits<int>::max(),
+            "Length or offset larger than INT_MAX not supported");
+        (*lengths)[i] = length;
+        (*offsets)[i] = offset;
+        offset += length;
+    }
+
+    return offset;
+}*/
+
 } // namespace
 
 ProcessGroupCCL::WorkCCL::~WorkCCL()
@@ -244,23 +323,23 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const std::shared_ptr<Store>& store,
     int rank,
     int size,
-    const std::string& groupName)
+    const std::chrono::duration<float>& timeout)
 {
-  cclInitOnce();
+    cclInitOnce();
 
-  if ((rank != -1) && (rank < 0 || (size_t)rank != globalComm->rank()))
-  {
-      throw std::runtime_error("unexpected rank " + std::to_string(rank) +
-                               ", CCL rank " + std::to_string(globalComm->rank()));
-  }
+    if ((rank != -1) && (rank < 0 || (size_t)rank != globalComm->rank()))
+    {
+        throw std::runtime_error("unexpected rank " + std::to_string(rank) +
+                                 ", CCL rank " + std::to_string(globalComm->rank()));
+    }
 
-  if ((size != -1) && (size <= 0 || (size_t)size != globalComm->size()))
-  {
-      throw std::runtime_error("unexpected size " + std::to_string(size) +
-                               ", CCL size " + std::to_string(globalComm->size()));
-  }
+    if ((size != -1) && (size <= 0 || (size_t)size != globalComm->size()))
+    {
+        throw std::runtime_error("unexpected size " + std::to_string(size) +
+                                 ", CCL size " + std::to_string(globalComm->size()));
+    }
 
-  return std::make_shared<ProcessGroupCCL>(rank, size);
+    return std::make_shared<ProcessGroupCCL>(rank, size);
 }
 
 ProcessGroupCCL::ProcessGroupCCL(int rank, int size)
@@ -287,7 +366,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->bcast(tensors[0].data_ptr(),
                                 (size_t)tensors[0].numel(),
-                                cclDatatypes.at(tensors[0].type().scalarType()),
+                                cclDatatypes.at(tensors[0].scalar_type()),
                                 (size_t)opts.rootRank,
                                 &collAttr));
 
@@ -310,7 +389,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
                                     tensors[0].data_ptr(),
                                     (size_t)tensors[0].numel(),
-                                    cclDatatypes.at(tensors[0].type().scalarType()),
+                                    cclDatatypes.at(tensors[0].scalar_type()),
                                     cclOps.at(opts.reduceOp),
                                     &collAttr));
 
@@ -341,7 +420,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
     CCL_CHECK(req = comm->reduce(tensors[0].data_ptr(),
                                  tensors[0].data_ptr(),
                                  (size_t)tensors[0].numel(),
-                                 cclDatatypes.at(tensors[0].type().scalarType()),
+                                 cclDatatypes.at(tensors[0].scalar_type()),
                                  cclOps.at(opts.reduceOp),
                                  (size_t)opts.rootRank,
                                  &collAttr));
@@ -395,7 +474,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
                                      flatOutputTensor.data_ptr(),
 #endif
                                      (size_t*)recvCounts.data(),
-                                     cclDatatypes.at(inputTensors[0].type().scalarType()),
+                                     cclDatatypes.at(inputTensors[0].scalar_type()),
                                      &collAttrAg));
 
 #ifdef USE_VECTOR_ALLGATHERV
@@ -412,6 +491,15 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors));
 }
+
+std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
+      at::Tensor& outputBuffer,
+      at::Tensor& inputBuffer,
+      const AllgatherOptions& /* unused */)
+{
+    throw std::runtime_error("ProcessGroupCCL does not support allgather_base");
+}
+
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
     std::vector<std::vector<at::Tensor>>& /* unused */,
@@ -445,25 +533,85 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
     throw std::runtime_error("ProcessGroupCCL does not support reduce_scatter");
 }
 
+std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
+    at::Tensor& outputTensor,
+    at::Tensor& inputTensor,
+    std::vector<int64_t>& outputSplitSizes,
+    std::vector<int64_t>& inputSplitSizes,
+    const AllToAllOptions& opts)
+{
+    checkSingleTensorHelper(inputTensor);
+    checkSingleTensorHelper(outputTensor);
+
+    if (outputSplitSizes.size() == 0 && inputSplitSizes.size() == 0)
+    {
+        // We can use alltoall
+        TORCH_CHECK(
+            outputTensor.numel() == inputTensor.numel() &&
+                outputTensor.type() == inputTensor.type(),
+            "Tensors are not equal in size or data type");
+        TORCH_CHECK(
+            outputTensor.size(0) % size_ == 0,
+            "Tensor's dim 0 does not divide equally across group size");
+
+        std::shared_ptr<ccl::request> req;
+
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->alltoall(inputTensor.data_ptr(),
+                                       outputTensor.data_ptr(),
+                                       (size_t)outputTensor.numel() / comm->size(),
+                                       cclDatatypes.at(outputTensor.scalar_type()),
+                                       &collAttr));
+
+        auto a2aTensors = std::vector<at::Tensor> { inputTensor, outputTensor };
+        return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
+    }
+    else
+    {
+        // Need alltoallv
+        checkSplitSizes(inputSplitSizes, inputTensor, size_);
+        checkSplitSizes(outputSplitSizes, outputTensor, size_);
+
+        std::vector<size_t> send_counts(size_);
+        std::vector<size_t> recv_counts(size_);
+
+        size_t inLen = inputSplitSizes.size() == 0 ? inputTensor.numel() / size_ : 0;
+        size_t outLen = outputSplitSizes.size() == 0 ? outputTensor.numel() / size_ : 0;
+
+        for (int i = 0; i < size_; i++)
+        {
+            send_counts[i] = (inLen > 0 ? inLen : inputSplitSizes[i]);
+            recv_counts[i] = (outLen > 0 ? outLen : outputSplitSizes[i]);
+        }
+
+        std::shared_ptr<ccl::request> req;
+
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->alltoallv(inputTensor.data_ptr(),
+                                        send_counts.data(),
+                                        outputTensor.data_ptr(),
+                                        recv_counts.data(),
+                                        cclDatatypes.at(outputTensor.scalar_type()),
+                                        &collAttr));
+
+        auto a2aTensors = std::vector<at::Tensor> { inputTensor, outputTensor };
+        return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
+    }
+}
+
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<at::Tensor>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
     const AllToAllOptions& opts)
 {
-    checkSingleTensor(outputTensors);
-    checkSingleTensor(inputTensors);
+    TORCH_CHECK(
+        inputTensors.size() == (size_t)size_,
+        "Number of input tensors are not equal to group size");
+    TORCH_CHECK(
+        outputTensors.size() == (size_t)size_,
+        "Number of output tensors are not equal to group size");
 
-    std::shared_ptr<ccl::request> req;
-
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->alltoall(inputTensors[0].data_ptr(),
-                                   outputTensors[0].data_ptr(),
-                                   (size_t)outputTensors[0].numel() / comm->size(),
-                                   cclDatatypes.at(outputTensors[0].type().scalarType()),
-                                   &collAttr));
-
-    auto a2aTensors = std::vector<at::Tensor> { inputTensors[0], outputTensors[0] };
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
+    /* TODO */
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(

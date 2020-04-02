@@ -500,7 +500,6 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
     throw std::runtime_error("ProcessGroupCCL does not support allgather_base");
 }
 
-
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
     std::vector<std::vector<at::Tensor>>& /* unused */,
     std::vector<at::Tensor>& /* unused */,

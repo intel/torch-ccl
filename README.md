@@ -67,4 +67,4 @@ $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 
 
 # License
-[BSD License](https://github.com/oneapi-src/oneCCL/blob/master/LICENSE)
+[BSD License](https://github.com/intel/torch-ccl/blob/master/LICENSE)

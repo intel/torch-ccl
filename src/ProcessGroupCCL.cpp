@@ -137,6 +137,19 @@ void checkSameSizeAndType(const at::Tensor& tensor,
     }
 }
 
+void checkSameType(const at::Tensor& tensor,
+                          const std::vector<at::Tensor>& tensors)
+{
+    for (size_t i = 0; i < tensors.size(); ++i)
+    {
+        if (tensors[i].scalar_type() != tensor.scalar_type())
+        {
+            throw std::runtime_error("tensors are not equal in data type");
+        }
+        checkSingleTensorHelper(tensors[i]);
+    }
+}
+
 void checkSplitSizes(
     const std::vector<int64_t>& split_sizes,
     const at::Tensor& tensor,
@@ -159,62 +172,40 @@ void checkSplitSizes(
     }
 }
 
-/*int64_t computeLengthsAndOffsets(
-    const std::vector<int64_t>& split_sizes,
-    const at::Tensor& tensor,
-    std::vector<int>* lengths,
-    std::vector<int>* offsets)
-{
-    int64_t group_size = lengths->size();
-    bool equal_splits = false;
-    int64_t dim0_size = tensor.size(0);
-    int64_t row_size = (dim0_size ? tensor.numel() / dim0_size : 1);
-    int64_t split_size = 0;
-    int64_t offset = 0;
-
-    if (split_sizes.size() == 0)
-    {
-        equal_splits = true;
-        split_size = tensor.size(0) / group_size;
-    }
-
-    for (int i = 0; i < group_size; i++)
-    {
-        int64_t length = row_size * (equal_splits ? split_size : split_sizes[i]);
-        TORCH_INTERNAL_ASSERT(
-            length <= std::numeric_limits<int>::max() &&
-                offset <= std::numeric_limits<int>::max(),
-            "Length or offset larger than INT_MAX not supported");
-        (*lengths)[i] = length;
-        (*offsets)[i] = offset;
-        offset += length;
-    }
-
-    return offset;
-}
-
-int64_t computeLengthsAndOffsets(
+bool computeLengthsAndCheckAndGetFlat(
     const std::vector<at::Tensor>& tensors,
-    std::vector<int>* lengths,
-    std::vector<int>* offsets)
+    std::vector<size_t>& lengths,
+    at::Tensor &flatTensor)
 {
-    int64_t group_size = lengths->size();
+    int64_t group_size = lengths.size();
+    auto first_tensor = tensors[0];
     int64_t offset = 0;
-
+    auto first_length = first_tensor.numel();
+    auto storage = first_tensor.storage();
+    auto first_storage_offset = first_tensor.storage_offset();
+    bool isFlat = true;
     for (int i = 0; i < group_size; i++)
     {
-        int64_t length = tensors[i].numel();
-        TORCH_INTERNAL_ASSERT(
-            length <= std::numeric_limits<int>::max() &&
-                offset <= std::numeric_limits<int>::max(),
-            "Length or offset larger than INT_MAX not supported");
-        (*lengths)[i] = length;
-        (*offsets)[i] = offset;
+        auto &cur_tensor = tensors[i];
+        int64_t length = cur_tensor.numel();
+        if (first_length == 0 && length != 0) {
+            first_length = length;
+            first_tensor = cur_tensor;
+            storage = cur_tensor.storage();
+            first_storage_offset = cur_tensor.storage_offset();
+        }
+        lengths[i] = length;
+        if (isFlat && length != 0 && (!storage.is_alias_of(cur_tensor.storage()) || cur_tensor.storage_offset() != first_storage_offset + offset)) isFlat = false;
         offset += length;
     }
+    if (isFlat) {
+        flatTensor = first_tensor;
+    } else {
+        flatTensor = at::empty({offset}, first_tensor.options());
+    }
 
-    return offset;
-}*/
+    return isFlat;
+}
 
 } // namespace
 
@@ -509,19 +500,120 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
-    std::vector<std::vector<at::Tensor>>& /* unused */,
-    std::vector<at::Tensor>& /* unused */,
-    const GatherOptions& /* unused */)
+    std::vector<std::vector<at::Tensor>>& outputTensors,
+    std::vector<at::Tensor>& inputTensors,
+    const GatherOptions& opts)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support gather");
+    checkSingleTensor(inputTensors);
+
+    if (rank_ != opts.rootRank) {
+        if (outputTensors.size() > 0) {
+            throw std::runtime_error(
+                    "Gather: number of output tensors should be 0 "
+                    "for non-root");
+        }
+    } else {
+        if (outputTensors.size() != 1) {
+            throw std::runtime_error("Gather: multi-GPU collective is not supported");
+        }
+        if (static_cast<size_t>(size_) != outputTensors[0].size()) {
+            throw std::runtime_error(
+                    "Gather: number of output tensors should equal "
+                    "to the world size");
+        }
+        // We don't need to be of same size but checking to be compatible with MPI
+        checkSameSizeAndType(inputTensors[0], outputTensors[0]);
+    }
+
+    std::vector<size_t> send_counts(size_, 0);
+    std::vector<size_t> recv_counts(size_);
+    at::Tensor flatOutput;
+    bool isOutputFlat = computeLengthsAndCheckAndGetFlat(outputTensors[0], recv_counts, flatOutput);
+    send_counts[rank_] = recv_counts[rank_];
+
+    std::shared_ptr<ccl::request> req;
+
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->alltoallv(inputTensors[0].data_ptr(),
+                send_counts.data(),
+                flatOutput.data_ptr(),
+                recv_counts.data(),
+                cclDatatypes.at(flatOutput.scalar_type()),
+                &collAttr));
+
+    std::vector<at::Tensor> gatherTensors;
+
+    if (!isOutputFlat) {
+        req->wait();
+        auto flatOutputSplits =
+            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(), recv_counts.size()), 0);
+        for (int i = 0; i < size_; i++) {
+            outputTensors[0][i].view({-1}).copy_(flatOutputSplits[i]);
+        }
+    } else {
+        gatherTensors.emplace_back(flatOutput);
+        gatherTensors.emplace_back(inputTensors[0]);
+    }
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(gatherTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
-    std::vector<at::Tensor>& /* unused */,
-    std::vector<std::vector<at::Tensor>>& /* unused */,
-    const ScatterOptions& /* unused */)
+    std::vector<at::Tensor>& outputTensors,
+    std::vector<std::vector<at::Tensor>>& inputTensors,
+    const ScatterOptions& opts)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support scatter");
+    checkSingleTensor(outputTensors);
+
+    if (rank_ != opts.rootRank) {
+        if (inputTensors.size() > 0) {
+            throw std::runtime_error(
+                    "Scatter: number of input tensors should be 0 "
+                    "for non-root");
+        }
+    } else {
+        if (inputTensors.size() != 1) {
+            throw std::runtime_error(
+                    "Scatter: multi-GPU collective is not supported");
+        }
+        if (static_cast<size_t>(size_) != inputTensors[0].size()) {
+            throw std::runtime_error(
+                    "Scatter: number of input tensors should equal "
+                    "to the world size");
+        }
+        // We don't need to be of same size but checking to be compatible with MPI
+        checkSameSizeAndType(outputTensors[0], inputTensors[0]);
+    }
+
+    std::vector<size_t> send_counts(size_);
+    std::vector<size_t> recv_counts(size_, 0);
+    at::Tensor flatInput;
+    bool isInputFlat = computeLengthsAndCheckAndGetFlat(inputTensors[0], send_counts, flatInput);
+
+    if (!isInputFlat) {
+        auto flatInputSplits =
+            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(), send_counts.size()), 0);
+        for (int i = 0; i < size_; i++) {
+            flatInputSplits[i].copy_(inputTensors[0][i].view({-1}));
+        }
+    }
+    recv_counts[rank_] = send_counts[rank_];
+
+    std::shared_ptr<ccl::request> req;
+
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
+                send_counts.data(),
+                outputTensors[0].data_ptr(),
+                recv_counts.data(),
+                cclDatatypes.at(flatInput.scalar_type()),
+                &collAttr));
+
+    std::vector<at::Tensor> scatterTensors;
+    scatterTensors.emplace_back(outputTensors[0]);
+    scatterTensors.emplace_back(flatInput);
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(scatterTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
@@ -574,13 +666,19 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
         std::vector<size_t> send_counts(size_);
         std::vector<size_t> recv_counts(size_);
 
-        size_t inLen = inputSplitSizes.size() == 0 ? inputTensor.numel() / size_ : 0;
-        size_t outLen = outputSplitSizes.size() == 0 ? outputTensor.numel() / size_ : 0;
+        // inLen or outLen can be 0 so we need explicit flag
+        bool inputSplitsEqual = inputSplitSizes.size() == 0;
+        bool outputSplitsEqual = outputSplitSizes.size() == 0;
 
+        size_t inLen = inputTensor.numel();
+        size_t outLen = outputTensor.numel();
+        if (inLen) inLen /= (inputSplitsEqual ? size_ : inputTensor.size(0)); 
+        if (outLen) outLen /= (outputSplitsEqual ? size_ : outputTensor.size(0)); 
+        
         for (int i = 0; i < size_; i++)
         {
-            send_counts[i] = (inLen > 0 ? inLen : inputSplitSizes[i]);
-            recv_counts[i] = (outLen > 0 ? outLen : outputSplitSizes[i]);
+            send_counts[i] = (inputSplitsEqual ? inLen : inputSplitSizes[i] * inLen);
+            recv_counts[i] = (outputSplitsEqual ? outLen : outputSplitSizes[i] * outLen);
         }
 
         std::shared_ptr<ccl::request> req;
@@ -610,11 +708,48 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
         outputTensors.size() == (size_t)size_,
         "Number of output tensors are not equal to group size");
 
+    checkSameType(outputTensors[0], inputTensors);
+    checkSameType(inputTensors[0], outputTensors);
+
+    std::vector<size_t> send_counts(size_);
+    std::vector<size_t> recv_counts(size_);
+    at::Tensor flatInput;
+    at::Tensor flatOutput;
+    bool isInputFlat = computeLengthsAndCheckAndGetFlat(inputTensors, send_counts, flatInput);
+    bool isOutputFlat = computeLengthsAndCheckAndGetFlat(outputTensors, recv_counts, flatOutput);
+
+    if (!isInputFlat) {
+        auto flatInputSplits =
+            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(), send_counts.size()), 0);
+        for (int i = 0; i < size_; i++) {
+            flatInputSplits[i].copy_(inputTensors[i].view({-1}));
+        }
+    }
+
     std::shared_ptr<ccl::request> req;
 
-    /* TODO */
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+    CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
+                send_counts.data(),
+                flatOutput.data_ptr(),
+                recv_counts.data(),
+                cclDatatypes.at(flatOutput.scalar_type()),
+                &collAttr));
 
-    auto a2aTensors = std::vector<at::Tensor> {};
+    std::vector<at::Tensor> a2aTensors;
+
+    if (!isOutputFlat) {
+        req->wait();
+        auto flatOutputSplits =
+            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(), recv_counts.size()), 0);
+        for (int i = 0; i < size_; i++) {
+            outputTensors[i].view({-1}).copy_(flatOutputSplits[i]);
+        }
+    } else {
+        a2aTensors.emplace_back(flatOutput);
+        a2aTensors.emplace_back(flatInput);
+    }
+
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
 }
 

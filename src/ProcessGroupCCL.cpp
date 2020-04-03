@@ -129,7 +129,7 @@ void checkSameSizeAndType(const at::Tensor& tensor,
     for (size_t i = 0; i < tensors.size(); ++i)
     {
         if ((tensors[i].numel() != tensor.numel()) ||
-            (tensors[i].type() != tensor.type()))
+            (tensors[i].scalar_type() != tensor.scalar_type()))
         {
             throw std::runtime_error("tensors are not equal in size or data type");
         }
@@ -547,7 +547,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
         // We can use alltoall
         TORCH_CHECK(
             outputTensor.numel() == inputTensor.numel() &&
-                outputTensor.type() == inputTensor.type(),
+                outputTensor.scalar_type() == inputTensor.scalar_type(),
             "Tensors are not equal in size or data type");
         TORCH_CHECK(
             outputTensor.size(0) % size_ == 0,
@@ -610,7 +610,12 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
         outputTensors.size() == (size_t)size_,
         "Number of output tensors are not equal to group size");
 
+    std::shared_ptr<ccl::request> req;
+
     /* TODO */
+
+    auto a2aTensors = std::vector<at::Tensor> {};
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(

@@ -175,7 +175,7 @@ void checkSplitSizes(
 bool computeLengthsAndCheckAndGetFlat(
     const std::vector<at::Tensor>& tensors,
     std::vector<size_t>& lengths,
-    at::Tensor &flatTensor)
+    at::Tensor& flatTensor)
 {
     int64_t group_size = lengths.size();
     auto first_tensor = tensors[0];
@@ -184,23 +184,35 @@ bool computeLengthsAndCheckAndGetFlat(
     auto storage = first_tensor.storage();
     auto first_storage_offset = first_tensor.storage_offset();
     bool isFlat = true;
+
     for (int i = 0; i < group_size; i++)
     {
-        auto &cur_tensor = tensors[i];
+        auto& cur_tensor = tensors[i];
         int64_t length = cur_tensor.numel();
-        if (first_length == 0 && length != 0) {
+
+        if (first_length == 0 && length != 0)
+        {
             first_length = length;
             first_tensor = cur_tensor;
             storage = cur_tensor.storage();
             first_storage_offset = cur_tensor.storage_offset();
         }
+
         lengths[i] = length;
-        if (isFlat && length != 0 && (!storage.is_alias_of(cur_tensor.storage()) || cur_tensor.storage_offset() != first_storage_offset + offset)) isFlat = false;
+        if (isFlat && length != 0 &&
+            (!storage.is_alias_of(cur_tensor.storage()) ||
+             cur_tensor.storage_offset() != first_storage_offset + offset))
+            isFlat = false;
+
         offset += length;
     }
-    if (isFlat) {
+
+    if (isFlat)
+    {
         flatTensor = first_tensor;
-    } else {
+    }
+    else
+    {
         flatTensor = at::empty({offset}, first_tensor.options());
     }
 
@@ -506,21 +518,29 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
 {
     checkSingleTensor(inputTensors);
 
-    if (rank_ != opts.rootRank) {
-        if (outputTensors.size() > 0) {
+    if (rank_ != opts.rootRank)
+    {
+        if (outputTensors.size() > 0)
+        {
             throw std::runtime_error(
                     "Gather: number of output tensors should be 0 "
                     "for non-root");
         }
-    } else {
-        if (outputTensors.size() != 1) {
+    }
+    else
+    {
+        if (outputTensors.size() != 1)
+        {
             throw std::runtime_error("Gather: multi-GPU collective is not supported");
         }
-        if (static_cast<size_t>(size_) != outputTensors[0].size()) {
+
+        if (static_cast<size_t>(size_) != outputTensors[0].size())
+        {
             throw std::runtime_error(
                     "Gather: number of output tensors should equal "
                     "to the world size");
         }
+
         // We don't need to be of same size but checking to be compatible with MPI
         checkSameSizeAndType(inputTensors[0], outputTensors[0]);
     }
@@ -528,29 +548,40 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     std::vector<size_t> send_counts(size_, 0);
     std::vector<size_t> recv_counts(size_);
     at::Tensor flatOutput;
-    bool isOutputFlat = computeLengthsAndCheckAndGetFlat(outputTensors[0], recv_counts, flatOutput);
+
+    bool isOutputFlat =
+        computeLengthsAndCheckAndGetFlat(outputTensors[0],
+                                         recv_counts, flatOutput);
+
     send_counts[rank_] = recv_counts[rank_];
 
     std::shared_ptr<ccl::request> req;
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->alltoallv(inputTensors[0].data_ptr(),
-                send_counts.data(),
-                flatOutput.data_ptr(),
-                recv_counts.data(),
-                cclDatatypes.at(flatOutput.scalar_type()),
-                &collAttr));
+                                    send_counts.data(),
+                                    flatOutput.data_ptr(),
+                                    recv_counts.data(),
+                                    cclDatatypes.at(flatOutput.scalar_type()),
+                                    &collAttr));
 
     std::vector<at::Tensor> gatherTensors;
 
-    if (!isOutputFlat) {
+    if (!isOutputFlat)
+    {
         req->wait();
+
         auto flatOutputSplits =
-            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(), recv_counts.size()), 0);
-        for (int i = 0; i < size_; i++) {
+            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(),
+                                        recv_counts.size()), 0);
+
+        for (int i = 0; i < size_; i++)
+        {
             outputTensors[0][i].view({-1}).copy_(flatOutputSplits[i]);
         }
-    } else {
+    }
+    else
+    {
         gatherTensors.emplace_back(flatOutput);
         gatherTensors.emplace_back(inputTensors[0]);
     }
@@ -565,22 +596,30 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
 {
     checkSingleTensor(outputTensors);
 
-    if (rank_ != opts.rootRank) {
-        if (inputTensors.size() > 0) {
+    if (rank_ != opts.rootRank)
+    {
+        if (inputTensors.size() > 0)
+        {
             throw std::runtime_error(
                     "Scatter: number of input tensors should be 0 "
                     "for non-root");
         }
-    } else {
-        if (inputTensors.size() != 1) {
+    }
+    else
+    {
+        if (inputTensors.size() != 1)
+        {
             throw std::runtime_error(
                     "Scatter: multi-GPU collective is not supported");
         }
-        if (static_cast<size_t>(size_) != inputTensors[0].size()) {
+
+        if (static_cast<size_t>(size_) != inputTensors[0].size())
+        {
             throw std::runtime_error(
                     "Scatter: number of input tensors should equal "
                     "to the world size");
         }
+
         // We don't need to be of same size but checking to be compatible with MPI
         checkSameSizeAndType(outputTensors[0], inputTensors[0]);
     }
@@ -588,12 +627,19 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     std::vector<size_t> send_counts(size_);
     std::vector<size_t> recv_counts(size_, 0);
     at::Tensor flatInput;
-    bool isInputFlat = computeLengthsAndCheckAndGetFlat(inputTensors[0], send_counts, flatInput);
 
-    if (!isInputFlat) {
+    bool isInputFlat =
+        computeLengthsAndCheckAndGetFlat(inputTensors[0],
+                                         send_counts, flatInput);
+
+    if (!isInputFlat)
+    {
         auto flatInputSplits =
-            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(), send_counts.size()), 0);
-        for (int i = 0; i < size_; i++) {
+            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(),
+                                       send_counts.size()), 0);
+
+        for (int i = 0; i < size_; i++)
+        {
             flatInputSplits[i].copy_(inputTensors[0][i].view({-1}));
         }
     }
@@ -603,11 +649,11 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
-                send_counts.data(),
-                outputTensors[0].data_ptr(),
-                recv_counts.data(),
-                cclDatatypes.at(flatInput.scalar_type()),
-                &collAttr));
+                                    send_counts.data(),
+                                    outputTensors[0].data_ptr(),
+                                    recv_counts.data(),
+                                    cclDatatypes.at(flatInput.scalar_type()),
+                                    &collAttr));
 
     std::vector<at::Tensor> scatterTensors;
     scatterTensors.emplace_back(outputTensors[0]);
@@ -715,13 +761,21 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<size_t> recv_counts(size_);
     at::Tensor flatInput;
     at::Tensor flatOutput;
-    bool isInputFlat = computeLengthsAndCheckAndGetFlat(inputTensors, send_counts, flatInput);
-    bool isOutputFlat = computeLengthsAndCheckAndGetFlat(outputTensors, recv_counts, flatOutput);
 
-    if (!isInputFlat) {
+    bool isInputFlat =
+        computeLengthsAndCheckAndGetFlat(inputTensors, send_counts, flatInput);
+
+    bool isOutputFlat =
+        computeLengthsAndCheckAndGetFlat(outputTensors, recv_counts, flatOutput);
+
+    if (!isInputFlat)
+    {
         auto flatInputSplits =
-            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(), send_counts.size()), 0);
-        for (int i = 0; i < size_; i++) {
+            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(),
+                                       send_counts.size()), 0);
+
+        for (int i = 0; i < size_; i++)
+        {
             flatInputSplits[i].copy_(inputTensors[i].view({-1}));
         }
     }
@@ -730,22 +784,29 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
-                send_counts.data(),
-                flatOutput.data_ptr(),
-                recv_counts.data(),
-                cclDatatypes.at(flatOutput.scalar_type()),
-                &collAttr));
+                                    send_counts.data(),
+                                    flatOutput.data_ptr(),
+                                    recv_counts.data(),
+                                    cclDatatypes.at(flatOutput.scalar_type()),
+                                    &collAttr));
 
     std::vector<at::Tensor> a2aTensors;
 
-    if (!isOutputFlat) {
+    if (!isOutputFlat)
+    {
         req->wait();
+
         auto flatOutputSplits =
-            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(), recv_counts.size()), 0);
-        for (int i = 0; i < size_; i++) {
+            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(),
+                                        recv_counts.size()), 0);
+
+        for (int i = 0; i < size_; i++)
+        {
             outputTensors[i].view({-1}).copy_(flatOutputSplits[i]);
         }
-    } else {
+    }
+    else
+    {
         a2aTensors.emplace_back(flatOutput);
         a2aTensors.emplace_back(flatInput);
     }

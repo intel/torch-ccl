@@ -187,9 +187,6 @@ public:
   std::shared_ptr<ProcessGroup::Work> barrier(
       const BarrierOptions& opts = BarrierOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> barrier(
-      const BarrierOptions& opts = BarrierOptions()) override;
-
   // create a new ProcessGroupCCL and initialize CCL if not initialized
   static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
       const std::shared_ptr<Store>& store,

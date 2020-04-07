@@ -35,7 +35,11 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+
+#ifndef PROCESS_GROUP_CCL_TEST
 #include <pybind11/chrono.h>
+#endif
+
 #include <thread>
 #include <vector>
 
@@ -44,7 +48,10 @@
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
 #include <ccl.hpp>
+
+#ifndef PROCESS_GROUP_CCL_TEST
 #include <torch/extension.h>
+#endif
 
 #define USE_VECTOR_ALLGATHERV
 //#define USE_CACHE
@@ -194,12 +201,14 @@ public:
       int size,
       const std::chrono::duration<float>& timeout);
 
+#ifndef PROCESS_GROUP_CCL_TEST
   static void ProcessGroupCCLConstructor() __attribute__((constructor))
   {
       py::object register_backend =
           py::module::import("torch.distributed").attr("Backend").attr("register_backend");
       register_backend("ccl", py::cpp_function(createProcessGroupCCL));
   }
+#endif
 
  protected:
 

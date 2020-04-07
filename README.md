@@ -52,8 +52,19 @@ import torch_ccl
 
 ...
 
+os.environ['MASTER_ADDR'] = '127.0.0.1'
+os.environ['MASTER_PORT'] = '29500'
+os.environ['RANK'] = os.environ.get('PMI_RANK', -1)
+os.environ['WORLD_SIZE'] = os.environ.get('PMI_SIZE', -1)
+
 backend = 'ccl'
 dist.init_process_group(backend, ...)
+my_rank = dist.get_rank()
+my_size = dist.get_world_size()
+print("my rank = %d  my size = %d" % (my_rank, my_size))
+
+...
+
 model = torch.nn.parallel.DistributedDataParallel(model, ...)
 
 ...

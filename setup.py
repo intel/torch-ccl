@@ -3,7 +3,7 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 if "CCL_ROOT" not in os.environ:
-    raise Exception("CCL_ROOT is not defined! Please run CCL variable setting shell script.")
+    raise Exception("CCL_ROOT is not defined! Please run oneCCL variable setting shell script.")
 
 ext_modules = [
     CppExtension(

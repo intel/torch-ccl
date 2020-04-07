@@ -199,6 +199,7 @@ bool computeLengthsAndCheckAndGetFlat(
         }
 
         lengths[i] = length;
+
         if (isFlat && length != 0 &&
             (!storage.is_alias_of(cur_tensor.storage()) ||
              cur_tensor.storage_offset() != first_storage_offset + offset))
@@ -845,9 +846,11 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
     return std::make_shared<ProcessGroupCCL::WorkCCL>();
 }
 
+#ifndef PROCESS_GROUP_CCL_TEST
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
     m.def("createProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL);
 }
+#endif
 
 } // namespace c10d

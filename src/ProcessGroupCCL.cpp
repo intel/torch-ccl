@@ -547,14 +547,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     }
 
     std::vector<size_t> send_counts(size_, 0);
-    std::vector<size_t> recv_counts(size_);
+    std::vector<size_t> recv_counts(size_, 0);
     at::Tensor flatOutput;
+    bool isOutputFlat = false;
 
-    bool isOutputFlat =
-        computeLengthsAndCheckAndGetFlat(outputTensors[0],
-                                         recv_counts, flatOutput);
+    send_counts[opts.rootRank] = inputTensors[0].numel();
+    if (rank_ == opts.rootRank)
+    {
+        isOutputFlat =
+            computeLengthsAndCheckAndGetFlat(outputTensors[0],
+                                             recv_counts, flatOutput);
+        TORCH_CHECK(send_counts[rank_] == recv_counts[rank_], "Gather: Send and recv count doesn't match");
+    }
+    else
+    {
+        flatOutput = at::empty({0}, inputTensors[0].options());
+    }
 
-    send_counts[rank_] = recv_counts[rank_];
 
     std::shared_ptr<ccl::request> req;
 
@@ -568,22 +577,29 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
 
     std::vector<at::Tensor> gatherTensors;
 
-    if (!isOutputFlat)
+    if (rank_ == opts.rootRank)
     {
-        req->wait();
-
-        auto flatOutputSplits =
-            flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(),
-                                        recv_counts.size()), 0);
-
-        for (int i = 0; i < size_; i++)
+        if (!isOutputFlat)
         {
-            outputTensors[0][i].view({-1}).copy_(flatOutputSplits[i]);
+            req->wait();
+
+            auto flatOutputSplits =
+                flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recv_counts.data(),
+                                            recv_counts.size()), 0);
+
+            for (int i = 0; i < size_; i++)
+            {
+                outputTensors[0][i].view({-1}).copy_(flatOutputSplits[i]);
+            }
+        }
+        else
+        {
+            gatherTensors.emplace_back(flatOutput);
+            gatherTensors.emplace_back(inputTensors[0]);
         }
     }
     else
     {
-        gatherTensors.emplace_back(flatOutput);
         gatherTensors.emplace_back(inputTensors[0]);
     }
 
@@ -625,26 +641,35 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
         checkSameSizeAndType(outputTensors[0], inputTensors[0]);
     }
 
-    std::vector<size_t> send_counts(size_);
+    std::vector<size_t> send_counts(size_, 0);
     std::vector<size_t> recv_counts(size_, 0);
     at::Tensor flatInput;
 
-    bool isInputFlat =
-        computeLengthsAndCheckAndGetFlat(inputTensors[0],
-                                         send_counts, flatInput);
+    recv_counts[opts.rootRank] = outputTensors[0].numel();
 
-    if (!isInputFlat)
+    if (rank_ == opts.rootRank)
     {
-        auto flatInputSplits =
-            flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(),
-                                       send_counts.size()), 0);
+        bool isInputFlat =
+            computeLengthsAndCheckAndGetFlat(inputTensors[0],
+                                             send_counts, flatInput);
 
-        for (int i = 0; i < size_; i++)
+        if (!isInputFlat)
         {
-            flatInputSplits[i].copy_(inputTensors[0][i].view({-1}));
+            auto flatInputSplits =
+                flatInput.split_with_sizes(c10::IntArrayRef((int64_t*)send_counts.data(),
+                                           send_counts.size()), 0);
+
+            for (int i = 0; i < size_; i++)
+            {
+                flatInputSplits[i].copy_(inputTensors[0][i].view({-1}));
+            }
         }
+        TORCH_CHECK(recv_counts[rank_] == send_counts[rank_], "Scatter: Send and recv count doesn't match");
     }
-    recv_counts[rank_] = send_counts[rank_];
+    else
+    {
+        flatInput = at::empty({0}, outputTensors[0].options());
+    }
 
     std::shared_ptr<ccl::request> req;
 
@@ -658,7 +683,8 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
 
     std::vector<at::Tensor> scatterTensors;
     scatterTensors.emplace_back(outputTensors[0]);
-    scatterTensors.emplace_back(flatInput);
+    if (rank_ == opts.rootRank)
+        scatterTensors.emplace_back(flatInput);
 
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(scatterTensors));
 }
@@ -719,9 +745,9 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
 
         size_t inLen = inputTensor.numel();
         size_t outLen = outputTensor.numel();
-        if (inLen) inLen /= (inputSplitsEqual ? size_ : inputTensor.size(0)); 
-        if (outLen) outLen /= (outputSplitsEqual ? size_ : outputTensor.size(0)); 
-        
+        if (inLen) inLen /= (inputSplitsEqual ? size_ : inputTensor.size(0));
+        if (outLen) outLen /= (outputSplitsEqual ? size_ : outputTensor.size(0));
+
         for (int i = 0; i < size_; i++)
         {
             send_counts[i] = (inputSplitsEqual ? inLen : inputSplitSizes[i] * inLen);

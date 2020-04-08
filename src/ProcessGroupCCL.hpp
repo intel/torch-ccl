@@ -215,7 +215,7 @@ public:
   static void cclInitOnce();
   static void cclFini();
 
-  ccl::communicator* comm;
+  ccl::communicator_t comm;
 
 #ifdef USE_VECTOR_ALLGATHERV
   static thread_local std::vector<void*> agRecvBuffers;

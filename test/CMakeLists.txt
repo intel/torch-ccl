@@ -12,10 +12,18 @@ if (NOT DEFINED ENV{CCL_ROOT})
 endif()
 
 execute_process(
-  COMMAND python -c "import sys; import os; print(os.path.split(sys.executable)[0], end='')"
+  COMMAND python -c "import sysconfig; print(sysconfig.get_config_var(\"LIBDIR\"), end='')"
   OUTPUT_VARIABLE PYTHON_LIB_PATH
 )
-set(PYTHON_LIB_PATH "${PYTHON_LIB_PATH}/../lib")
+
+execute_process(
+  COMMAND bash -c "ls ${PYTHON_LIB_PATH} | grep '^libpython.*.so$'"
+  OUTPUT_VARIABLE PYTHON_LIB_NAME
+)
+
+string(REPLACE "lib" "" PYTHON_LIB_NAME "${PYTHON_LIB_NAME}")
+string(REPLACE ".so" "" PYTHON_LIB_NAME "${PYTHON_LIB_NAME}")
+string(REPLACE "\n" "" PYTHON_LIB_NAME "${PYTHON_LIB_NAME}")
 
 execute_process(
   COMMAND python -c "import torch; import os; print(os.path.dirname(torch.__file__), end='')"
@@ -31,7 +39,7 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 add_definitions(-DPROCESS_GROUP_CCL_TEST)
 
-#show build info
+# show build info
 message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
 message(STATUS "CXX compiler : ${CMAKE_CXX_COMPILER}")
 message(STATUS "TORCH_LIBRARIES : ${TORCH_LIBRARIES}")
@@ -39,6 +47,7 @@ message(STATUS "TORCH_INCLUDE_DIRS : ${TORCH_INCLUDE_DIRS}")
 message(STATUS "TORCH_CXX_FLAGS : ${TORCH_CXX_FLAGS}")
 message(STATUS "CCL_ROOT : $ENV{CCL_ROOT}")
 message(STATUS "PYTHON_LIB_PATH : ${PYTHON_LIB_PATH}")
+message(STATUS "PYTHON_LIB_NAME : ${PYTHON_LIB_NAME}")
 
 set(test_src
     ${CMAKE_CURRENT_SOURCE_DIR}/../test/ProcessGroupCCLTest.cpp
@@ -47,5 +56,5 @@ set(test_name ProcessGroupCCLTest)
 add_executable(${test_name} "${test_src}")
 set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 14)
 target_include_directories(${test_name} PRIVATE ${TORCH_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../src $ENV{CCL_ROOT}/include)
-target_link_libraries(${test_name} python3.6m shm c10 torch torch_cpu torch_python pthread ccl)
+target_link_libraries(${test_name} ${PYTHON_LIB_NAME} shm c10 torch torch_cpu torch_python pthread ccl)
 target_compile_options(${test_name} PRIVATE -Wno-error)

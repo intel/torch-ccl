@@ -16,9 +16,8 @@ std::shared_ptr<c10d::ProcessGroup> createProcessGroup()
     return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, timeout);
 }
 
-void waitWork(
-    std::shared_ptr<c10d::ProcessGroup> pg,
-    std::vector<std::shared_ptr<c10d::ProcessGroup::Work>> works)
+void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,
+              std::vector<std::shared_ptr<c10d::ProcessGroup::Work>> works)
 {
     for (auto& work : works)
     {
@@ -34,21 +33,21 @@ void waitWork(
     }
 }
 
-void testAllgather(int iter = 10000)
+void testAllgather(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
-    std::vector<std::vector<at::Tensor>> allTensors(iter);
+    std::vector<std::vector<at::Tensor>> allInputTensors(iter);
     std::vector<std::vector<std::vector<at::Tensor>>> allOutputTensors(iter);
 
-    auto worldSize = pg->getSize();
     auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
 
     // Generate inputs
     for (auto i = 0; i < iter; ++i)
     {
         auto tensor = at::ones({16, 16}) * i * rank;
-        allTensors[i] = std::vector<at::Tensor>({tensor});
+        allInputTensors[i] = std::vector<at::Tensor>({tensor});
         allOutputTensors[i] = std::vector<std::vector<at::Tensor>>(1);
         allOutputTensors[i][0].resize(worldSize);
         for (auto j = 0; j < worldSize; ++j)
@@ -58,11 +57,11 @@ void testAllgather(int iter = 10000)
     }
 
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
-    for (size_t i = 0; i < allTensors.size(); ++i)
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
         std::shared_ptr<::c10d::ProcessGroup::Work> work =
-            pg->allgather(allOutputTensors[i], allTensors[i]);
+            pg->allgather(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
 
@@ -86,11 +85,19 @@ void testAllgather(int iter = 10000)
             }
         }
     }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAllgather: passed\n");
 }
 
-void testAllreduce(int iter = 10000)
+void testAllreduce(int iter = 1000)
 {
     auto pg = createProcessGroup();
+
+    auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
 
     // Generate inputs
     std::vector<std::vector<at::Tensor>> allTensors(iter);
@@ -111,8 +118,6 @@ void testAllreduce(int iter = 10000)
 
     waitWork(pg, works);
 
-    auto worldSize = pg->getSize();
-
     // Verify outputs
     for (int i = 0; i < iter; ++i)
     {
@@ -130,38 +135,42 @@ void testAllreduce(int iter = 10000)
     }
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAllreduce: passed\n");
 }
 
-void testAlltoallBase(int iter = 10000)
+void testAlltoallBase(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
-    std::vector<at::Tensor> allTensors(iter);
+    std::vector<at::Tensor> allInputTensors(iter);
     std::vector<at::Tensor> allOutputTensors(iter);
 
-    auto worldSize = pg->getSize();
     auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
 
-    const int per_rank_size = 16;
+    const int perRankSize = 256;
 
     // Generate inputs
     for (auto i = 0; i < iter; ++i)
     {
-        auto tensorOne = at::ones({worldSize * per_rank_size}) * i * rank;
-        auto tensorZero = at::zeros({worldSize * per_rank_size});
+        auto tensorOne = at::ones({worldSize * perRankSize}) * i * rank;
+        auto tensorZero = at::zeros({worldSize * perRankSize});
 
-        allTensors[i] = tensorOne;
+        allInputTensors[i] = tensorOne;
         allOutputTensors[i] = tensorZero;
     }
 
     std::vector<int64_t> splitSizes;
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
 
-    for (size_t i = 0; i < allTensors.size(); ++i)
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
         std::shared_ptr<::c10d::ProcessGroup::Work> work =
-            pg->alltoall_base(allOutputTensors[i], allTensors[i], splitSizes, splitSizes);
+            pg->alltoall_base(allOutputTensors[i], allInputTensors[i],
+                              splitSizes, splitSizes);
         works.push_back(std::move(work));
     }
 
@@ -172,12 +181,12 @@ void testAlltoallBase(int iter = 10000)
     {
         for (int j = 0; j < worldSize; ++j)
         {
-            for (auto k = 0; k < per_rank_size; ++k)
+            for (auto k = 0; k < perRankSize; ++k)
             {
                 const auto expected = i * j;
                 auto data = allOutputTensors[i].data_ptr<float>();
 
-                size_t idx = j * per_rank_size + k;
+                size_t idx = j * perRankSize + k;
 
                 if (data[idx] != expected)
                 {
@@ -188,40 +197,50 @@ void testAlltoallBase(int iter = 10000)
             }
         }
     }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAlltoall: passed\n");
 }
 
-void testAlltoall(int iter = 10000)
+void testAlltoallFlat(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
-    std::vector<std::vector<at::Tensor>> allTensors(iter);
+    std::vector<std::vector<at::Tensor>> allInputTensors(iter);
     std::vector<std::vector<at::Tensor>> allOutputTensors(iter);
 
-    auto worldSize = pg->getSize();
     auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
+
+    const int perRankSize = 256;
 
     // Generate inputs
     for (auto i = 0; i < iter; ++i)
     {
-        auto tensorOne = at::ones({16, 16}) * i * rank;
-        auto tensorZero = at::zeros({16, 16});
+        auto tensorOne = at::ones({worldSize * perRankSize}) * i * rank;
+        auto tensorZero = at::zeros({worldSize * perRankSize});
 
-        allTensors[i].resize(worldSize);
+        auto tensorOneChunks = tensorOne.split(perRankSize);
+        auto tensorZeroChunks = tensorZero.split(perRankSize);
+
+        allInputTensors[i].resize(worldSize);
         allOutputTensors[i].resize(worldSize);
 
         for (auto j = 0; j < worldSize; ++j)
         {
-            allTensors[i][j] = tensorOne;
-            allOutputTensors[i][j] = tensorZero;
+            allInputTensors[i][j] = tensorOneChunks[j];
+            allOutputTensors[i][j] = tensorZeroChunks[j];
         }
     }
 
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
-    for (size_t i = 0; i < allTensors.size(); ++i)
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
         std::shared_ptr<::c10d::ProcessGroup::Work> work =
-            pg->alltoall(allOutputTensors[i], allTensors[i]);
+            pg->alltoall(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
 
@@ -238,18 +257,89 @@ void testAlltoall(int iter = 10000)
             {
                 if (data[k] != expected)
                 {
-                    printf("testAlltoall: unexpected result: got %f, expected %f, iter %d, rank %d, elem %d\n",
+                    printf("testAlltoallFlat: unexpected result: got %f, "
+                        "expected %f, iter %d, rank %d, elem %d\n",
                         data[k], (float)expected, i, j, k);
                     throw std::runtime_error("BOOM!");
                 }
             }
         }
     }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAlltoallFlat: passed\n");
 }
 
-void testBarrier(int iter = 10000)
+void testAlltoallNonFlat(int iter = 1000)
 {
     auto pg = createProcessGroup();
+
+    std::vector<std::vector<at::Tensor>> allInputTensors(iter);
+    std::vector<std::vector<at::Tensor>> allOutputTensors(iter);
+
+    auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
+
+    // Generate inputs
+    for (auto i = 0; i < iter; ++i)
+    {
+        auto tensorOne = at::ones({16, 16}) * i * rank;
+        auto tensorZero = at::zeros({16, 16});
+
+        allInputTensors[i].resize(worldSize);
+        allOutputTensors[i].resize(worldSize);
+
+        for (auto j = 0; j < worldSize; ++j)
+        {
+            allInputTensors[i][j] = tensorOne.clone();
+            allOutputTensors[i][j] = tensorZero.clone();
+        }
+    }
+
+    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
+    {
+        // Kick off work
+        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+            pg->alltoall(allOutputTensors[i], allInputTensors[i]);
+        works.push_back(std::move(work));
+    }
+
+    waitWork(pg, works);
+
+    // Verify outputs
+    for (int i = 0; i < iter; ++i)
+    {
+        for (int j = 0; j < worldSize; ++j)
+        {
+            const auto expected = i * j;
+            auto data = allOutputTensors[i][j].data_ptr<float>();
+            for (auto k = 0; k < allOutputTensors[i][j].numel(); ++k)
+            {
+                if (data[k] != expected)
+                {
+                    printf("testAlltoallNonFlat: unexpected result: got %f, "
+                        "expected %f, iter %d, rank %d, elem %d\n",
+                        data[k], (float)expected, i, j, k);
+                    throw std::runtime_error("BOOM!");
+                }
+            }
+        }
+    }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAlltoallNonFlat: passed\n");
+}
+
+void testBarrier(int iter = 1000)
+{
+    auto pg = createProcessGroup();
+
+    auto rank = pg->getRank();
 
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto i = 0; i < iter; ++i)
@@ -262,11 +352,16 @@ void testBarrier(int iter = 10000)
     waitWork(pg, works);
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testBarrier: passed\n");
 }
 
-void testBroadcast(int iter = 10000)
+void testBroadcast(int iter = 1000)
 {
     auto pg = createProcessGroup();
+
+    auto rank = pg->getRank();
 
     // Generate inputs
     std::vector<std::vector<at::Tensor>> allTensors(iter);
@@ -312,25 +407,28 @@ void testBroadcast(int iter = 10000)
     }
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testBroadcast: passed\n");
 }
 
-void testGather(int iter = 10000)
+void testGather(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
-    auto worldSize = pg->getSize();
     auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
 
     int rootRank = 0;
 
     // Generate inputs
-    std::vector<std::vector<at::Tensor>> allTensors(iter);
+    std::vector<std::vector<at::Tensor>> allInputTensors(iter);
     std::vector<std::vector<std::vector<at::Tensor>>> allOutputTensors(iter);
 
     for (auto i = 0; i < iter; ++i)
     {
         auto tensor = at::ones({16, 16}) * i * rank;
-        allTensors[i] = std::vector<at::Tensor>({tensor});
+        allInputTensors[i] = std::vector<at::Tensor>({tensor});
 
         if (rank == rootRank)
         {
@@ -348,11 +446,11 @@ void testGather(int iter = 10000)
 
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
 
-    for (size_t i = 0; i < allTensors.size(); ++i)
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
         std::shared_ptr<::c10d::ProcessGroup::Work> work =
-            pg->gather(allOutputTensors[i], allTensors[i], gatherOptions);
+            pg->gather(allOutputTensors[i], allInputTensors[i], gatherOptions);
         works.push_back(std::move(work));
     }
 
@@ -381,11 +479,16 @@ void testGather(int iter = 10000)
     }
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testGather: passed\n");
 }
 
-void testReduce(int iter = 10000)
+void testReduce(int iter = 1000)
 {
     auto pg = createProcessGroup();
+
+    auto rank = pg->getRank();
 
     // Generate inputs
     std::vector<std::vector<at::Tensor>> allTensors(iter);
@@ -429,19 +532,22 @@ void testReduce(int iter = 10000)
     }
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testReduce: passed\n");
 }
 
-void testScatter(int iter = 10000)
+void testScatter(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
-    auto worldSize = pg->getSize();
     auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
 
     int rootRank = 0;
 
     // Generate inputs
-    std::vector<std::vector<std::vector<at::Tensor>>> allTensors(iter);
+    std::vector<std::vector<std::vector<at::Tensor>>> allInputTensors(iter);
     std::vector<std::vector<at::Tensor>> allOutputTensors(iter);
 
     for (auto i = 0; i < iter; ++i)
@@ -453,11 +559,11 @@ void testScatter(int iter = 10000)
         {
             tensor = at::ones({16, 16}) * i;
 
-            allTensors[i] = std::vector<std::vector<at::Tensor>>(1);
-            allTensors[i][0].resize(worldSize);
+            allInputTensors[i] = std::vector<std::vector<at::Tensor>>(1);
+            allInputTensors[i][0].resize(worldSize);
             for (auto j = 0; j < worldSize; ++j)
             {
-                allTensors[i][0][j] = tensor;
+                allInputTensors[i][0][j] = tensor.clone();
             }
         }        
     }
@@ -466,11 +572,11 @@ void testScatter(int iter = 10000)
     scatterOptions.rootRank = rootRank;
 
     std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
-    for (size_t i = 0; i < allTensors.size(); ++i)
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
         std::shared_ptr<::c10d::ProcessGroup::Work> work =
-            pg->scatter(allOutputTensors[i], allTensors[i], scatterOptions);
+            pg->scatter(allOutputTensors[i], allInputTensors[i], scatterOptions);
         works.push_back(std::move(work));
     }
 
@@ -496,19 +602,23 @@ void testScatter(int iter = 10000)
     }
 
     pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testScatter: passed\n");
 }
 
 int main(int argc, char** argv)
 {
-    //testAllgather();
-    //testAllreduce();
+    testAllgather();
+    testAllreduce();
     testAlltoallBase();
-    //testAlltoall();
-    //testBarrier();
-    //testBroadcast();
-    //testGather();
-    //testReduce();
-    //testScatter();
+    testAlltoallFlat();
+    testAlltoallNonFlat();
+    testBarrier();
+    testBroadcast();
+    testGather();
+    testReduce();
+    testScatter();
 
     std::cout << "Test successful" << std::endl;
 

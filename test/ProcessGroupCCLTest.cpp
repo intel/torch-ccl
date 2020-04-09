@@ -64,7 +64,82 @@ void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,
     }
 }
 
-void testAllgather(int iter = 1000)
+void testAllgatherFlat(int iter = 1000)
+{
+    auto pg = createProcessGroup();
+
+    std::vector<std::vector<at::Tensor>> allInputTensors(iter);
+    std::vector<std::vector<std::vector<at::Tensor>>> allOutputTensors(iter);
+
+    auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
+
+    const int perRankSize = 256;
+
+    std::vector<int64_t> recvCounts(worldSize);
+    int64_t totalRecvCount = 0;
+
+    for (auto i = 0; i < worldSize; ++i)
+    {
+        recvCounts[i] = perRankSize + i;
+        totalRecvCount += recvCounts[i];
+    }
+
+    // Generate inputs
+    for (auto i = 0; i < iter; ++i)
+    {
+        auto tensorOne = at::ones({recvCounts[rank]}) * i * rank;
+        allInputTensors[i] = std::vector<at::Tensor>({tensorOne});
+
+        auto tensorZero = at::zeros({totalRecvCount});
+
+        auto tensorZeroChunks =
+            tensorZero.split_with_sizes(c10::IntArrayRef((int64_t*)recvCounts.data(), recvCounts.size()), 0);
+        allOutputTensors[i] = std::vector<std::vector<at::Tensor>>(1);
+        allOutputTensors[i][0].resize(worldSize);
+        for (auto j = 0; j < worldSize; ++j)
+        {
+            allOutputTensors[i][0][j] = tensorZeroChunks[j];
+        }
+    }
+
+    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    for (size_t i = 0; i < allInputTensors.size(); ++i)
+    {
+        // Kick off work
+        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+            pg->allgather(allOutputTensors[i], allInputTensors[i]);
+        works.push_back(std::move(work));
+    }
+
+    waitWork(pg, works);
+
+    // Verify outputs
+    for (int i = 0; i < iter; ++i)
+    {
+        for (int j = 0; j < worldSize; ++j)
+        {
+            const auto expected = i * j;
+            auto data = allOutputTensors[i][0][j].data_ptr<float>();
+            for (auto k = 0; k < allOutputTensors[i][0][j].numel(); ++k)
+            {
+                if (data[k] != expected)
+                {
+                    printf("testAllgatherFlat: unexpected result: got %f, expected %f\n",
+                        data[k], (float)expected);
+                    throw std::runtime_error("BOOM!");
+                }
+            }
+        }
+    }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testAllgatherFlat: passed\n");
+}
+
+void testAllgatherNotFlat(int iter = 1000)
 {
     auto pg = createProcessGroup();
 
@@ -109,7 +184,7 @@ void testAllgather(int iter = 1000)
             {
                 if (data[k] != expected)
                 {
-                    printf("testAllgather: unexpected result: got %f, expected %f\n",
+                    printf("testAllgatherNotFlat: unexpected result: got %f, expected %f\n",
                         data[k], (float)expected);
                     throw std::runtime_error("BOOM!");
                 }
@@ -120,7 +195,7 @@ void testAllgather(int iter = 1000)
     pg->barrier()->wait();
 
     if (rank == 0)
-        printf("testAllgather: passed\n");
+        printf("testAllgatherNotFlat: passed\n");
 }
 
 void testAllreduce(int iter = 1000)
@@ -640,7 +715,8 @@ void testScatter(int iter = 1000)
 
 int main(int argc, char** argv)
 {
-    testAllgather();
+    testAllgatherFlat();
+    testAllgatherNotFlat();
     testAllreduce();
     testAlltoallBase();
     testAlltoallFlat();

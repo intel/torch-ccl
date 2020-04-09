@@ -53,9 +53,6 @@
 #include <torch/extension.h>
 #endif
 
-#define USE_VECTOR_ALLGATHERV
-//#define USE_CACHE
-
 namespace c10d
 {
 
@@ -215,11 +212,8 @@ public:
   static void cclInitOnce();
   static void cclFini();
 
+  ccl::coll_attr collAttrAg;
   ccl::communicator_t comm;
-
-#ifdef USE_VECTOR_ALLGATHERV
-  static thread_local std::vector<void*> agRecvBuffers;
-#endif
 };
 
 } // namespace c10d

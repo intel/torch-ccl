@@ -422,12 +422,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 
     if (flatRes.isFlat)
     {
-        collAttrAg.vector_buf = 0;
         recvBuf = flatRes.firstTensor.data_ptr();
     }
     else
     {
-        collAttrAg.vector_buf = 1;
         std::transform(outputTensors[0].begin(), outputTensors[0].end(),
                        std::back_inserter(recvBufs), [](const at::Tensor& t) { return t.data_ptr(); } );
         recvBuf = recvBufs.data();
@@ -436,6 +434,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::shared_ptr<ccl::request> req;
 
     std::unique_lock<std::mutex> globalLock(globalMutex);
+    collAttrAg.vector_buf = flatRes.isFlat ? 0 : 1;
     CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
                                      (size_t)inputTensors[0].numel(),
                                      recvBuf,

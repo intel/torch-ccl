@@ -84,6 +84,8 @@ can be used to inspect time spent inside oneCCL calls.
 
 Example:
 
+profiling.py
+
 ```python
 
 import torch.nn.parallel

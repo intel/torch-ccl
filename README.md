@@ -112,7 +112,9 @@ print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_
 ```
 $ source <ccl_install_path>/env/setvars.sh
 $ mpirun -n 2 -l python profiling.py
+```
 
+```
 [0] rank = 0, size = 2
 [0] ------------------------------  ---------------  ---------------  ---------------  ---------------  ---------------  ---------------  ---------------
 [0] Name                            Self CPU total %  Self CPU total   CPU total %      CPU total        CPU time avg     Number of Calls  Input Shapes

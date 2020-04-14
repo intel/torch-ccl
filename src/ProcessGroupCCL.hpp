@@ -80,16 +80,20 @@ public:
 
       WorkCCL() {}
       WorkCCL(std::shared_ptr<ccl::request> req,
-              const std::vector<at::Tensor>& tensors) :
+              const std::vector<at::Tensor>& tensors,
+              std::string& debug_name) :
           req(req),
-          tensors(tensors)
+          tensors(tensors),
+          debug_name(debug_name)
       {}
 
       template<class ...Args>
       WorkCCL(std::shared_ptr<ccl::request> req,
-              Args&& ...args) :
+              Args&& ...args,
+              std::string& debug_name) :
           req(req),
-          tensors(std::forward<Args>(args)...)
+          tensors(std::forward<Args>(args)...),
+          debug_name(debug_name)
       {}
 
 
@@ -108,6 +112,7 @@ public:
           while CCL operation is in progress
       */
       std::vector<at::Tensor> tensors;
+      std::string debug_name;
 
       friend class ProcessGroupCCL;
   };

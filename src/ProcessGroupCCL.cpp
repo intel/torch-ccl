@@ -29,9 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "ProcessGroupCCL.hpp"
-
 #include <map>
+#include <torch/csrc/autograd/record_function.h>
+
+#include "ProcessGroupCCL.hpp"
 
 namespace c10d
 {

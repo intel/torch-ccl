@@ -296,7 +296,7 @@ bool ProcessGroupCCL::WorkCCL::wait()
 
 void ProcessGroupCCL::WorkCCL::abort()
 {
-    TORCH_CHECK(false, "ProcessGroupCCL::WorkCCL::abort not implemented.");
+    TORCH_CHECK(false, "ProcessGroupCCL::WorkCCL::abort not implemented");
 }
 
 void ProcessGroupCCL::cclFini()
@@ -404,7 +404,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
     std::vector<at::Tensor>& /* unused */,
     const AllreduceCoalescedOptions& /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support allreduce_coalesced");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support allreduce_coalesced");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
@@ -502,7 +502,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
       at::Tensor& inputBuffer,
       const AllgatherOptions& /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support allgather_base");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support allgather_base");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
@@ -510,7 +510,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
     std::vector<at::Tensor>& /* unused */,
     const AllgatherOptions& /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support allgather_coalesced");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support allgather_coalesced");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
@@ -691,7 +691,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
     std::vector<std::vector<at::Tensor>>& /* unused */,
     const ReduceScatterOptions& /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support reduce_scatter");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support reduce_scatter");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
@@ -853,7 +853,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(
     int /* unused */,
     int /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support send");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support send");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
@@ -861,22 +861,24 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
     int /* unused */,
     int /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support recv");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support recv");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recvAnysource(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */)
 {
-    throw std::runtime_error("ProcessGroupCCL does not support recvAnysource");
+    TORCH_CHECK(false, "ProcessGroupCCL does not support recvAnysource");
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
     const BarrierOptions& opts)
 {
     RECORD_FUNCTION("pg::barrier", std::vector<c10::IValue>());
+
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(comm->barrier());
+
     return std::make_shared<ProcessGroupCCL::WorkCCL>();
 }
 

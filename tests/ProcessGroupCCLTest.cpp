@@ -59,7 +59,7 @@ void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "Exception received: " << ex.what() << std::endl;
+            std::cerr << "exception received: " << ex.what() << std::endl;
             exit(0);
         }
     }

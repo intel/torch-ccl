@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #include <c10d/HashStore.hpp>
+#include <c10d/ProcessGroup.hpp>
 
 #include "ProcessGroupCCL.hpp"
 

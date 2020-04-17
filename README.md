@@ -73,7 +73,6 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```
 $ source <ccl_install_path>/env/setvars.sh
 $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
-
 ```
 
 

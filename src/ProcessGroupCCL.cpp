@@ -65,6 +65,7 @@ std::map<ReduceOp, ccl::reduction> cclOps =
 };
 
 // Type mapping
+#if CCL_MAJOR_VERSION == 0 && CCL_MINOR_VERSION < 6
 std::map<at::ScalarType, ccl::data_type> cclDatatypes =
 {
     {at::kByte, ccl::data_type::dt_char},
@@ -75,6 +76,18 @@ std::map<at::ScalarType, ccl::data_type> cclDatatypes =
     {at::kInt, ccl::data_type::dt_int},
     {at::kLong, ccl::data_type::dt_int64}
 };
+#else
+std::map<at::ScalarType, ccl::datatype> cclDatatypes =
+{
+    {at::kByte, ccl::datatype::dt_char},
+    {at::kChar, ccl::datatype::dt_char},
+    {at::kDouble, ccl::datatype::dt_double},
+    {at::kBFloat16, ccl::datatype::dt_bfp16},
+    {at::kFloat, ccl::datatype::dt_float},
+    {at::kInt, ccl::datatype::dt_int},
+    {at::kLong, ccl::datatype::dt_int64}
+};
+#endif
 
 static std::once_flag cclInitOnceFlag;
 static std::mutex globalMutex;

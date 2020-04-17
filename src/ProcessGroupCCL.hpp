@@ -31,7 +31,6 @@
 
 #pragma once
 
-#include <deque>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -40,7 +39,6 @@
 #include <pybind11/chrono.h>
 #endif
 
-#include <thread>
 #include <vector>
 
 #include <c10d/ProcessGroup.hpp>

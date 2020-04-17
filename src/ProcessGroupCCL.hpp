@@ -63,7 +63,8 @@ namespace c10d
 // All functions on this class are expected to be called in the same
 // order across processes in the group.
 //
-// All collective functions provided by this class is scheduled for asynchronous execution by CCL.
+// All collective functions provided by this class are scheduled
+// for asynchronous execution by CCL.
 //
 // Also note that ProcessGroupCCL only supports a single Tensor operation. In
 // other words, the size of the input Tensor vector should always be 1.

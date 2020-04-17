@@ -129,4 +129,3 @@ dist.all_to_all(y, x)
 print_all("y = %s" % y)
 
 dist.barrier()
-

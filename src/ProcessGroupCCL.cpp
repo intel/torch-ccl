@@ -270,7 +270,8 @@ bool ProcessGroupCCL::WorkCCL::wait()
         return true;
     }
 
-    RECORD_FUNCTION(std::string("pg::wait::") + debug_name, std::vector<c10::IValue>());
+    RECORD_FUNCTION(std::string("pg::wait::") + debugName, std::vector<c10::IValue>());
+
     std::unique_lock<std::mutex> globalLock(globalMutex);
     CCL_CHECK(req->wait());
     req.reset();
@@ -343,19 +344,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     const BroadcastOptions& opts)
 {
     RECORD_FUNCTION("pg::bcast", std::vector<c10::IValue>({tensors[0]}));
+
     checkSingleTensor(tensors);
     checkRank(opts.rootRank, getSize());
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->bcast(tensors[0].data_ptr(),
-                                (size_t)tensors[0].numel(),
-                                cclDatatypes.at(tensors[0].scalar_type()),
-                                (size_t)opts.rootRank));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->bcast(tensors[0].data_ptr(),
+                                    (size_t)tensors[0].numel(),
+                                    cclDatatypes.at(tensors[0].scalar_type()),
+                                    (size_t)opts.rootRank));
+    }
 
-    std::string debug_name = std::string("bcast::sz:") + std::to_string(tensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, debug_name);
+    std::string debugName = std::string("bcast::sz:") + std::to_string(tensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
@@ -363,19 +368,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     const AllreduceOptions& opts)
 {
     RECORD_FUNCTION("pg::allreduce", std::vector<c10::IValue>({tensors[0]}));
+
     checkSingleTensor(tensors);
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
-                                    tensors[0].data_ptr(),
-                                    (size_t)tensors[0].numel(),
-                                    cclDatatypes.at(tensors[0].scalar_type()),
-                                    cclOps.at(opts.reduceOp)));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
+                                        tensors[0].data_ptr(),
+                                        (size_t)tensors[0].numel(),
+                                        cclDatatypes.at(tensors[0].scalar_type()),
+                                        cclOps.at(opts.reduceOp)));
+    }
 
-    std::string debug_name = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, debug_name);
+    std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
@@ -390,21 +399,25 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
     const ReduceOptions& opts)
 {
     RECORD_FUNCTION("pg::reduce", std::vector<c10::IValue>({tensors[0]}));
+
     checkSingleTensor(tensors);
     checkRank(opts.rootRank, getSize());
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->reduce(tensors[0].data_ptr(),
-                                 tensors[0].data_ptr(),
-                                 (size_t)tensors[0].numel(),
-                                 cclDatatypes.at(tensors[0].scalar_type()),
-                                 cclOps.at(opts.reduceOp),
-                                 (size_t)opts.rootRank));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->reduce(tensors[0].data_ptr(),
+                                     tensors[0].data_ptr(),
+                                     (size_t)tensors[0].numel(),
+                                     cclDatatypes.at(tensors[0].scalar_type()),
+                                     cclOps.at(opts.reduceOp),
+                                     (size_t)opts.rootRank));
+    }
 
-    std::string debug_name = std::string("reduce::sz:") + std::to_string(tensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, debug_name);
+    std::string debugName = std::string("reduce::sz:") + std::to_string(tensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
@@ -413,6 +426,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     const AllgatherOptions& opts)
 {
     RECORD_FUNCTION("pg::allgather", std::vector<c10::IValue>({inputTensors[0]}));
+
     checkSingleTensor(inputTensors);
 
     TORCH_CHECK(outputTensors.size() == 1,
@@ -439,20 +453,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     else
     {
         std::transform(outputTensors[0].begin(), outputTensors[0].end(),
-                       std::back_inserter(recvBufs), [](const at::Tensor& t) { return t.data_ptr(); } );
+                       std::back_inserter(recvBufs),
+                       [](const at::Tensor& t) { return t.data_ptr(); } );
         recvBuf = recvBufs.data();
     }
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    collAttrAg.vector_buf = flatRes.isFlat ? 0 : 1;
-    CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
-                                     (size_t)inputTensors[0].numel(),
-                                     recvBuf,
-                                     (size_t*)recvCounts.data(),
-                                     cclDatatypes.at(inputTensors[0].scalar_type()),
-                                     &collAttrAg));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        collAttrAg.vector_buf = flatRes.isFlat ? 0 : 1;
+        CCL_CHECK(req = comm->allgatherv(inputTensors[0].data_ptr(),
+                                         (size_t)inputTensors[0].numel(),
+                                         recvBuf,
+                                         (size_t*)recvCounts.data(),
+                                         cclDatatypes.at(inputTensors[0].scalar_type()),
+                                         &collAttrAg));
+    }
 
     std::vector<at::Tensor> agTensors;
 
@@ -462,8 +479,9 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
         agTensors.assign(outputTensors[0].begin(), outputTensors[0].end());
     agTensors.emplace_back(inputTensors[0]);
 
-    std::string debug_name = std::string("allgather::sz:") + std::to_string(inputTensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors), debug_name);
+    std::string debugName = std::string("allgather::sz:") + std::to_string(inputTensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(agTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
@@ -488,6 +506,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     const GatherOptions& opts)
 {
     RECORD_FUNCTION("pg::gather", std::vector<c10::IValue>({inputTensors[0]}));
+
     checkSingleTensor(inputTensors);
 
     if (rank_ != opts.rootRank)
@@ -532,12 +551,14 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->alltoallv(inputTensors[0].data_ptr(),
-                                    sendCounts.data(),
-                                    flatOutput.data_ptr(),
-                                    recvCounts.data(),
-                                    cclDatatypes.at(flatOutput.scalar_type())));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->alltoallv(inputTensors[0].data_ptr(),
+                                        sendCounts.data(),
+                                        flatOutput.data_ptr(),
+                                        recvCounts.data(),
+                                        cclDatatypes.at(flatOutput.scalar_type())));
+    }
 
     std::vector<at::Tensor> gatherTensors;
 
@@ -567,8 +588,9 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
         gatherTensors.emplace_back(inputTensors[0]);
     }
 
-    std::string debug_name = std::string("gather::sz:") + std::to_string(inputTensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(gatherTensors), debug_name);
+    std::string debugName = std::string("gather::sz:") + std::to_string(inputTensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(gatherTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
@@ -577,6 +599,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     const ScatterOptions& opts)
 {
     RECORD_FUNCTION("pg::scatter", std::vector<c10::IValue>({outputTensors}));
+
     checkSingleTensor(outputTensors);
 
     if (rank_ != opts.rootRank)
@@ -602,7 +625,6 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     recvCounts[opts.rootRank] = outputTensors[0].numel();
 
     at::Tensor flatInput;
-
     int64_t flatSendCount = 0;
 
     if (rank_ == opts.rootRank)
@@ -632,20 +654,23 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
-                                    sendCounts.data(),
-                                    outputTensors[0].data_ptr(),
-                                    recvCounts.data(),
-                                    cclDatatypes.at(flatInput.scalar_type())));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
+                                        sendCounts.data(),
+                                        outputTensors[0].data_ptr(),
+                                        recvCounts.data(),
+                                        cclDatatypes.at(flatInput.scalar_type())));
+    }
 
     std::vector<at::Tensor> scatterTensors;
     scatterTensors.emplace_back(outputTensors[0]);
     if (rank_ == opts.rootRank)
         scatterTensors.emplace_back(flatInput);
 
-    std::string debug_name = std::string("scatter::sz:") + std::to_string(outputTensors[0].numel());
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(scatterTensors), debug_name);
+    std::string debugName = std::string("scatter::sz:") + std::to_string(outputTensors[0].numel());
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(scatterTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
@@ -664,6 +689,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
     const AllToAllOptions& opts)
 {
     RECORD_FUNCTION("pg::alltoall_base", std::vector<c10::IValue>({inputTensor, outputTensor}));
+
     checkSingleTensorHelper(inputTensor);
     checkSingleTensorHelper(outputTensor);
 
@@ -679,11 +705,13 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
         TORCH_CHECK(outputTensor.size(0) % size_ == 0,
             "alltoall_base: tensor's dim 0 does not divide equally across group size");
 
-        std::unique_lock<std::mutex> globalLock(globalMutex);
-        CCL_CHECK(req = comm->alltoall(inputTensor.data_ptr(),
-                                       outputTensor.data_ptr(),
-                                       (size_t)outputTensor.numel() / comm->size(),
-                                       cclDatatypes.at(outputTensor.scalar_type())));
+        {
+            std::unique_lock<std::mutex> globalLock(globalMutex);
+            CCL_CHECK(req = comm->alltoall(inputTensor.data_ptr(),
+                                           outputTensor.data_ptr(),
+                                           (size_t)outputTensor.numel() / comm->size(),
+                                           cclDatatypes.at(outputTensor.scalar_type())));
+        }
     }
     else
     {
@@ -709,17 +737,21 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
             recvCounts[i] = (outputSplitsEqual ? outLen : outputSplitSizes[i] * outLen);
         }
 
-        std::unique_lock<std::mutex> globalLock(globalMutex);
-        CCL_CHECK(req = comm->alltoallv(inputTensor.data_ptr(),
-                                        sendCounts.data(),
-                                        outputTensor.data_ptr(),
-                                        recvCounts.data(),
-                                        cclDatatypes.at(outputTensor.scalar_type())));
+        {
+            std::unique_lock<std::mutex> globalLock(globalMutex);
+            CCL_CHECK(req = comm->alltoallv(inputTensor.data_ptr(),
+                                            sendCounts.data(),
+                                            outputTensor.data_ptr(),
+                                            recvCounts.data(),
+                                            cclDatatypes.at(outputTensor.scalar_type())));
+        }
     }
 
     auto a2aTensors = std::vector<at::Tensor> { inputTensor, outputTensor };
-    std::string debug_name = std::string("alltoall_base::sz:") + std::to_string((inputTensor.numel() + outputTensor.numel()) / (2 * size_));
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors), debug_name);
+    std::string debugName = std::string("alltoall_base::sz:") +
+        std::to_string((inputTensor.numel() + outputTensor.numel()) / (2 * size_));
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
@@ -728,6 +760,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     const AllToAllOptions& opts)
 {
     RECORD_FUNCTION("pg::alltoall", std::vector<c10::IValue>());
+
     TORCH_CHECK(inputTensors.size() == (size_t)size_,
         "alltoall: number of input tensors are not equal to group size");
 
@@ -766,12 +799,14 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
 
     std::shared_ptr<ccl::request> req;
 
-    std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
-                                    sendCounts.data(),
-                                    flatOutput.data_ptr(),
-                                    recvCounts.data(),
-                                    cclDatatypes.at(flatOutput.scalar_type())));
+    {
+        std::unique_lock<std::mutex> globalLock(globalMutex);
+        CCL_CHECK(req = comm->alltoallv(flatInput.data_ptr(),
+                                        sendCounts.data(),
+                                        flatOutput.data_ptr(),
+                                        recvCounts.data(),
+                                        cclDatatypes.at(flatOutput.scalar_type())));
+    }
 
     std::vector<at::Tensor> a2aTensors;
 
@@ -794,8 +829,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
         a2aTensors.emplace_back(flatInput);
     }
 
-    std::string debug_name = std::string("alltoall::sz:") + std::to_string((flatSendCount + flatRecvCount) / (2 * size_));
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors), debug_name);
+    std::string debugName = std::string("alltoall::sz:") +
+        std::to_string((flatSendCount + flatRecvCount) / (2 * size_));
+
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(a2aTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(

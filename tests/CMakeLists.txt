@@ -81,7 +81,7 @@ message(STATUS "PYTHON_LIB_PATH : ${PYTHON_LIB_PATH}")
 message(STATUS "PYTHON_LIB_NAME : ${PYTHON_LIB_NAME}")
 
 set(test_src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../test/ProcessGroupCCLTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/ProcessGroupCCLTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/ProcessGroupCCL.cpp)
 set(test_name ProcessGroupCCLTest)
 add_executable(${test_name} "${test_src}")

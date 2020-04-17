@@ -63,6 +63,11 @@ size = dist.get_world_size()
 
 print_all("rank = %d, size = %d" % (rank, size))
 
+print_all("all_to_all_single with empty tensors")
+dist.all_to_all_single(torch.empty([0]), torch.empty([0]))
+
+dist.barrier()
+
 print_all("scatter using alltoall")
 if rank == 1:
     x = [torch.ones([2]) * (r + 1) for r in range(size)]

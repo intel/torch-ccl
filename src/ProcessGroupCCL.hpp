@@ -86,15 +86,13 @@ public:
           debugName(debugName)
       {}
 
-      template<class ...Args>
       WorkCCL(std::shared_ptr<ccl::request> req,
-              Args&& ...args,
+              std::vector<at::Tensor>&& tensors,
               std::string&& debugName) :
           req(req),
-          tensors(std::forward<Args>(args)...),
+          tensors(std::move(tensors)),
           debugName(debugName)
       {}
-
 
       virtual ~WorkCCL();
 

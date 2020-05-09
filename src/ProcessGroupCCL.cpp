@@ -87,6 +87,16 @@ std::map<at::ScalarType, ccl::datatype> cclDatatypes =
     {at::kInt, ccl::datatype::dt_int},
     {at::kLong, ccl::datatype::dt_int64}
 };
+
+std::map<ccl_datatype_t, at::ScalarType> ptDatatypes =
+{
+    {ccl_dtype_char, at::kByte},
+    {ccl_dtype_int, at::kInt},
+    {ccl_dtype_bfp16, at::kBFloat16},
+    {ccl_dtype_float, at::kFloat},
+    {ccl_dtype_double, at::kDouble},
+    {ccl_dtype_int64, at::kLong}
+};
 #endif
 
 static std::once_flag cclInitOnceFlag;
@@ -96,8 +106,7 @@ static ccl::communicator_t globalComm;
 // Checking the input tensor's validity
 void checkSingleTensorHelper(const at::Tensor& tensor)
 {
-    TORCH_CHECK(tensor.is_contiguous(), "input tensor has to be contiguous");
-    TORCH_CHECK(!tensor.is_sparse(), "input tensor has to be dense");
+    TORCH_CHECK(tensor.is_sparse() || tensor.is_contiguous(), "input dense tensor has to be contiguous");
     TORCH_CHECK(!tensor.is_cuda(), "CUDA tensor detected and CCL doesn't support CUDA buffers");
     TORCH_CHECK(tensor.numel() >= 0, "input tensor numel should be non-negative");
 }
@@ -376,6 +385,67 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
 }
 
+ccl_status_t sparseAllreduceCompletionFn(
+    const void* indBuf, size_t indCount, ccl_datatype_t indDatatype,
+    const void* valBuf, size_t valCount, ccl_datatype_t valDatatype,
+    const ccl_fn_context_t* fnCtx, const void* userCtx)
+{
+    TORCH_CHECK(userCtx, "null user ctx");
+
+    printf("sparseAllreduceCompletionFn: "
+           "indices buf %p, count %zu, dt %d, "
+           "values buf %p, count %zu, dt %d, "
+           "fn_ctx %p, user_ctx %p\n",
+           indBuf, indCount, indDatatype,
+           valBuf, valCount, valDatatype,
+           fnCtx, userCtx); fflush(stdout);
+
+    at::Tensor* userTensor = (at::Tensor*)(userCtx);
+
+    TORCH_CHECK(userTensor->sparse_dim() == 1, "unexpected sparse_dim");
+
+    const auto valueShape = userTensor->sizes().slice(userTensor->sparse_dim());
+    auto resultValueShape = std::vector<int64_t>({(int64_t)indCount});
+    std::copy(valueShape.begin(), valueShape.end(), std::back_inserter(resultValueShape));
+
+    auto rawIndices = at::from_blob((void*)indBuf,
+                                    {1, (long int)indCount},
+                                    ptDatatypes.at(indDatatype));
+
+    auto rawValues = at::from_blob((void*)valBuf,
+                                   resultValueShape,
+                                   ptDatatypes.at(valDatatype));
+
+    auto indices = at::empty({1, (long int)indCount}, userTensor->_indices().options());
+
+    auto values = at::empty(resultValueShape,
+                            userTensor->_values().options());
+        
+    indices.copy_(rawIndices);
+    values.copy_(rawValues);
+
+    int64_t* indPtr = indices.data_ptr<int64_t>();
+    for (size_t idx = 0; idx < indCount; idx++)
+    {
+        printf("indices[%zu] = %lld\n", idx, indPtr[idx]);
+    }
+
+    float* valPtr = values.data_ptr<float>();
+    for (size_t idx = 0; idx < valCount; idx++)
+    {
+        printf("values[%zu] = %f\n", idx, valPtr[idx]);
+    }
+
+    auto tensor = at::sparse_coo_tensor(indices,
+                                        values,
+                                        userTensor->sizes(),
+                                        userTensor->options());
+
+    userTensor->copy_(tensor);            
+
+    return ccl_status_success;
+}
+
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     std::vector<at::Tensor>& tensors,
     const AllreduceOptions& opts)
@@ -384,20 +454,48 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
 
     checkSingleTensor(tensors);
 
+    const auto& layout = tensors[0].layout();
+    auto arTensors = std::vector<at::Tensor> { tensors[0] };
     std::shared_ptr<ccl::request> req;
 
     {
         std::unique_lock<std::mutex> globalLock(globalMutex);
-        CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
-                                        tensors[0].data_ptr(),
-                                        (size_t)tensors[0].numel(),
-                                        cclDatatypes.at(tensors[0].scalar_type()),
-                                        cclOps.at(opts.reduceOp)));
+
+        if (layout == c10::kStrided)
+        {
+            CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
+                                            tensors[0].data_ptr(),
+                                            (size_t)tensors[0].numel(),
+                                            cclDatatypes.at(tensors[0].scalar_type()),
+                                            cclOps.at(opts.reduceOp)));
+        }
+        else if (layout == c10::kSparse)
+        {
+            TORCH_CHECK(tensors[0].sparse_dim() == 1, "allreduce: only single sparse_dim is supported");
+
+            ccl::coll_attr attr{};
+            attr.sparse_allreduce_completion_fn = sparseAllreduceCompletionFn;
+            attr.sparse_allreduce_completion_ctx = &(arTensors[0]);
+
+            auto input = arTensors[0];
+            auto indices = input._indices();
+            auto values = input._values();
+
+            CCL_CHECK(req = comm->sparse_allreduce(indices.data_ptr(),
+                                                   (size_t)indices.numel(),
+                                                   values.data_ptr(),
+                                                   (size_t)values.numel(),
+                                                   nullptr, nullptr, nullptr, nullptr,
+                                                   cclDatatypes.at(indices.scalar_type()),
+                                                   cclDatatypes.at(values.scalar_type()),
+                                                   cclOps.at(opts.reduceOp),
+                                                   &attr));
+        }
     }
 
     std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
 
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
+    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(arTensors), std::move(debugName));
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(

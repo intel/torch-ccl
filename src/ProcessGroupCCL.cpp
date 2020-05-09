@@ -427,7 +427,7 @@ ccl_status_t sparseAllreduceCompletionFn(
     int64_t* indPtr = indices.data_ptr<int64_t>();
     for (size_t idx = 0; idx < indCount; idx++)
     {
-        printf("indices[%zu] = %lld\n", idx, indPtr[idx]);
+        printf("indices[%zu] = %ld\n", idx, indPtr[idx]);
     }
 
     float* valPtr = values.data_ptr<float>();

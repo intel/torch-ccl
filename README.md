@@ -14,9 +14,9 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 # Requirements
 
-PyTorch (development version with external ProcessGroup [support](https://github.com/pytorch/pytorch/commit/762270c51faa845b3fbb5a6779813d537f48e2e8)).
+PyTorch (1.5.0 or higher).
 
-Intel® oneAPI Collective Communications Library (2021.1-beta05 or newer).
+Intel® oneAPI Collective Communications Library (2021.1-beta05 or higher).
 
 
 # Installation
@@ -36,7 +36,7 @@ $ source <ccl_install_path>/env/setvars.sh
 4. Install the `torch-ccl` pip package.
 
 ```
-$ pip setup.py install 
+$ python setup.py install 
 ```
 
 

@@ -392,13 +392,13 @@ ccl_status_t sparseAllreduceCompletionFn(
 {
     TORCH_CHECK(userCtx, "null user ctx");
 
-    printf("sparseAllreduceCompletionFn: "
+    /*printf("sparseAllreduceCompletionFn: "
            "indices buf %p, count %zu, dt %d, "
            "values buf %p, count %zu, dt %d, "
            "fn_ctx %p, user_ctx %p\n",
            indBuf, indCount, indDatatype,
            valBuf, valCount, valDatatype,
-           fnCtx, userCtx); fflush(stdout);
+           fnCtx, userCtx); fflush(stdout);*/
 
     at::Tensor* userTensor = (at::Tensor*)(userCtx);
 
@@ -420,11 +420,11 @@ ccl_status_t sparseAllreduceCompletionFn(
 
     auto values = at::empty(resultValueShape,
                             userTensor->_values().options());
-        
+
     indices.copy_(rawIndices);
     values.copy_(rawValues);
 
-    int64_t* indPtr = indices.data_ptr<int64_t>();
+    /*int64_t* indPtr = indices.data_ptr<int64_t>();
     for (size_t idx = 0; idx < indCount; idx++)
     {
         printf("indices[%zu] = %ld\n", idx, indPtr[idx]);
@@ -434,14 +434,14 @@ ccl_status_t sparseAllreduceCompletionFn(
     for (size_t idx = 0; idx < valCount; idx++)
     {
         printf("values[%zu] = %f\n", idx, valPtr[idx]);
-    }
+    }*/
 
     auto tensor = at::sparse_coo_tensor(indices,
                                         values,
                                         userTensor->sizes(),
                                         userTensor->options());
 
-    userTensor->copy_(tensor);            
+    userTensor->copy_(tensor);
 
     return ccl_status_success;
 }

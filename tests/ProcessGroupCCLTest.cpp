@@ -41,10 +41,19 @@
 
 #include "ProcessGroupCCL.hpp"
 
+//#include <c10d/ProcessGroupGloo.hpp>
+
 std::shared_ptr<c10d::ProcessGroup> createProcessGroup()
 {
     auto store = std::make_shared<c10d::HashStore>();
     std::chrono::duration<float> timeout(1);
+
+    // c10d::ProcessGroupGloo::Options options;
+    // options.timeout = std::chrono::milliseconds(5000);
+    // options.devices.push_back(
+    //     c10d::ProcessGroupGloo::createDeviceForHostname("172.25.69.12"));
+    // return std::make_shared<c10d::ProcessGroupGloo>(store, atoi(getenv("PMI_RANK")), atoi(getenv("PMI_SIZE")), options);
+
     return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, timeout);
 }
 
@@ -245,6 +254,137 @@ void testAllreduce(int iter = 1000)
 
     if (rank == 0)
         printf("testAllreduce: passed\n");
+}
+
+void testSparseAllreduce(int iter = 1000)
+{
+    auto pg = createProcessGroup();
+
+    auto rank = pg->getRank();
+    auto worldSize = pg->getSize();
+
+    const int indiceCountCoeff = 16;
+    const int perRankValueCount = 256;
+
+    // Generate inputs
+    std::vector<std::vector<at::Tensor>> allTensors(iter);
+
+    int64_t indiceCount = (rank + 1) * indiceCountCoeff;
+    int64_t totalIndiceCount = worldSize * indiceCountCoeff;
+
+    auto resultValueShape = std::vector<int64_t>({totalIndiceCount, perRankValueCount});
+
+    for (auto i = 0; i < iter; ++i)
+    {
+        auto indices = at::zeros({1, indiceCount}, at::kLong);
+        auto indicesPtr = indices.data_ptr<int64_t>();
+        for (auto j = 0; j < indiceCount; j++)
+        {
+            indicesPtr[j] = j;
+        }
+
+        auto values = at::ones({indiceCount, perRankValueCount}, at::kFloat) * i;
+
+        // int64_t* indPtr = indices.data_ptr<int64_t>();
+        // for (size_t idx = 0; idx < indiceCount; idx++)
+        // {
+        //     printf("indices[%zu] = %ld\n", idx, indPtr[idx]);
+        // }
+
+        // float* valPtr = values.data_ptr<float>();
+        // for (size_t idx = 0; idx < indiceCount * perRankValueCount; idx++)
+        // {
+        //     printf("values[%zu] = %f\n", idx, valPtr[idx]);
+        // }
+
+
+        auto tensor = at::sparse_coo_tensor(indices,
+                                            values,
+                                            resultValueShape);
+
+        allTensors[i] = std::vector<at::Tensor>({tensor});
+    }
+
+    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    for (auto& tensors : allTensors)
+    {
+        // Kick off work
+        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->allreduce(tensors);
+        works.push_back(std::move(work));
+    }
+
+    waitWork(pg, works);
+
+    // Verify outputs
+    for (int i = 0; i < iter; ++i)
+    {
+        auto tensor = allTensors[i][0].coalesce();
+        auto indices = tensor.indices();
+        auto values = tensor.values();
+
+        if (indices.size(1) != totalIndiceCount)
+        {
+            printf("testSparseAllreduce: unexpected indices count: got %ld, expected %zu\n",
+                    indices.size(1), totalIndiceCount);
+            throw std::runtime_error("BOOM!");
+        }
+
+        if (values.dim() != 2)
+        {
+            printf("testSparseAllreduce: unexpected values dim: got %ld, expected 2\n",
+                    values.dim());
+            throw std::runtime_error("BOOM!");
+        }
+
+        if (values.size(0) != totalIndiceCount)
+        {
+            printf("testSparseAllreduce: unexpected values first dim count: got %zu, expected %zu\n",
+                    values.size(0), totalIndiceCount);
+            throw std::runtime_error("BOOM!");
+        }
+
+        if (values.size(1) != perRankValueCount)
+        {
+            printf("testSparseAllreduce: unexpected values second dim count: got %ld, expected %d\n",
+                    values.size(1), perRankValueCount);
+            throw std::runtime_error("BOOM!");
+        }
+
+        int64_t* indPtr = indices.data_ptr<int64_t>();
+        for (auto j = 0; j < totalIndiceCount; ++j)
+        {
+            if (indPtr[j] != j)
+            {
+                printf("testSparseAllreduce: unexpected index: got %ld, expected %d\n",
+                    indPtr[j], j);
+                throw std::runtime_error("BOOM!");
+            }
+        }
+
+        float* valPtr = values.data_ptr<float>();
+        for (auto j = 0; j < worldSize; ++j)
+        {
+            float expected = i * (worldSize - j);
+            for (auto k = 0; k < indiceCountCoeff; ++k)
+            {
+                for (auto v = 0; v < perRankValueCount; ++v)
+                {
+                    size_t valueIdx = j * indiceCountCoeff * perRankValueCount + k * perRankValueCount + v;
+                    if (valPtr[valueIdx] != expected)
+                    {
+                        printf("testSparseAllreduce: unexpected value[%zu]: got %f, expected %f\n",
+                            valueIdx, valPtr[valueIdx], expected);
+                        throw std::runtime_error("BOOM!");
+                    }
+                }
+            }
+        }
+    }
+
+    pg->barrier()->wait();
+
+    if (rank == 0)
+        printf("testSparseAllreduce: passed\n");
 }
 
 void testAlltoallBase(int iter = 1000)
@@ -719,6 +859,7 @@ int main(int argc, char** argv)
     testAllgatherFlat();
     testAllgatherNotFlat();
     testAllreduce();
+    testSparseAllreduce();
     testAlltoallBase();
     testAlltoallFlat();
     testAlltoallNonFlat();

@@ -36,7 +36,7 @@ $ source <ccl_install_path>/env/setvars.sh
 4. Install the `torch-ccl` pip package.
 
 ```
-$ python setup.py install 
+$ python setup.py install
 ```
 
 
@@ -78,7 +78,7 @@ $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 
 # Performance Debugging
 
-For debugging performance of communication primitives PyTorch's [Autograd profiler](https://pytorch.org/docs/stable/autograd.html#profiler) 
+For debugging performance of communication primitives PyTorch's [Autograd profiler](https://pytorch.org/docs/stable/autograd.html#profiler)
 can be used to inspect time spent inside oneCCL calls.
 
 Example:

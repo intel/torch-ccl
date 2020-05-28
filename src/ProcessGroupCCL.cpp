@@ -30,7 +30,7 @@
  */
 
 #include <map>
-#include <torch/csrc/autograd/record_function.h>
+#include <ATen/record_function.h>
 
 #include "ProcessGroupCCL.hpp"
 
@@ -385,6 +385,30 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     return std::make_shared<ProcessGroupCCL::WorkCCL>(req, tensors, std::move(debugName));
 }
 
+class SparseAllreduceWork : public ProcessGroupCCL::WorkCCL
+{
+public:
+
+     SparseAllreduceWork(const std::vector<at::Tensor>& tensors,
+                         std::string&& debugName) :
+          ProcessGroupCCL::WorkCCL(tensors, std::move(debugName))
+      {}
+
+      std::vector<at::Tensor>& getOutputTensors()
+      {
+          return outputTensors;
+      }
+
+      std::vector<at::Tensor> result() const override
+      {
+          TORCH_CHECK(outputTensors.size() == 1, "unexpected result size");
+          return outputTensors;
+      }
+
+private:
+      std::vector<at::Tensor> outputTensors;
+};
+
 ccl_status_t sparseAllreduceCompletionFn(
     const void* indBuf, size_t indCount, ccl_datatype_t indDatatype,
     const void* valBuf, size_t valCount, ccl_datatype_t valDatatype,
@@ -400,11 +424,21 @@ ccl_status_t sparseAllreduceCompletionFn(
            valBuf, valCount, valDatatype,
            fnCtx, userCtx); fflush(stdout);*/
 
-    at::Tensor* userTensor = (at::Tensor*)(userCtx);
+    SparseAllreduceWork* work = (SparseAllreduceWork*)(userCtx);
 
-    TORCH_CHECK(userTensor->sparse_dim() == 1, "unexpected sparse_dim");
+    std::vector<at::Tensor>& inputTensors = work->getTensors();
+    std::vector<at::Tensor>& outputTensors = work->getOutputTensors();
 
-    const auto valueShape = userTensor->sizes().slice(userTensor->sparse_dim());
+    TORCH_CHECK(inputTensors.size() == 1, "unexpected inputTensors size");
+    TORCH_CHECK(outputTensors.size() == 0, "unexpected outputTensors size");
+
+    outputTensors.reserve(inputTensors.size());
+
+    at::Tensor& inputTensor = inputTensors[0];
+
+    TORCH_CHECK(inputTensor.sparse_dim() == 1, "unexpected sparse_dim");
+
+    const auto valueShape = inputTensor.sizes().slice(inputTensor.sparse_dim());
     auto resultValueShape = std::vector<int64_t>({(int64_t)indCount});
     std::copy(valueShape.begin(), valueShape.end(), std::back_inserter(resultValueShape));
 
@@ -416,10 +450,10 @@ ccl_status_t sparseAllreduceCompletionFn(
                                    resultValueShape,
                                    ptDatatypes.at(valDatatype));
 
-    auto indices = at::empty({1, (long int)indCount}, userTensor->_indices().options());
+    auto indices = at::empty({1, (long int)indCount}, inputTensor._indices().options());
 
     auto values = at::empty(resultValueShape,
-                            userTensor->_values().options());
+                            inputTensor._values().options());
 
     indices.copy_(rawIndices);
     values.copy_(rawValues);
@@ -436,12 +470,26 @@ ccl_status_t sparseAllreduceCompletionFn(
         printf("values[%zu] = %f\n", idx, valPtr[idx]);
     }*/
 
-    auto tensor = at::sparse_coo_tensor(indices,
-                                        values,
-                                        userTensor->sizes(),
-                                        userTensor->options());
+    auto resultTensor =
+        at::sparse_coo_tensor(indices,
+                              values,
+                              inputTensor.sizes(),
+                              inputTensor.options());
 
-    userTensor->copy_(tensor);
+    /* propagate resultTensor using 2 ways - inputTensors and outputTensors */
+    for (size_t i = 0; i < inputTensors.size(); i++)
+    {
+        inputTensors[i].copy_(resultTensor);
+
+        if (resultTensor.is_sparse())
+        {
+            outputTensors.push_back(resultTensor.clone());
+        }
+        else
+        {
+            outputTensors.push_back(resultTensor.clone(at::MemoryFormat::Contiguous));
+        }
+    }
 
     return ccl_status_success;
 }
@@ -455,14 +503,17 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     checkSingleTensor(tensors);
 
     const auto& layout = tensors[0].layout();
-    auto arTensors = std::vector<at::Tensor> { tensors[0] };
     std::shared_ptr<ccl::request> req;
+    std::shared_ptr<ProcessGroupCCL::WorkCCL> work;
+
+    std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
 
     {
         std::unique_lock<std::mutex> globalLock(globalMutex);
 
         if (layout == c10::kStrided)
         {
+            work = std::make_shared<ProcessGroupCCL::WorkCCL>(tensors, std::move(debugName));
             CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
                                             tensors[0].data_ptr(),
                                             (size_t)tensors[0].numel(),
@@ -471,13 +522,15 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
         }
         else if (layout == c10::kSparse)
         {
-            TORCH_CHECK(tensors[0].sparse_dim() == 1, "allreduce: only single sparse_dim is supported");
+            work = std::make_shared<SparseAllreduceWork>(tensors, std::move(debugName));
+
+            at::Tensor input = tensors[0];
+            TORCH_CHECK(input.sparse_dim() == 1, "allreduce: only single sparse_dim is supported");
 
             ccl::coll_attr attr{};
             attr.sparse_allreduce_completion_fn = sparseAllreduceCompletionFn;
-            attr.sparse_allreduce_completion_ctx = &(arTensors[0]);
+            attr.sparse_allreduce_completion_ctx = work.get();
 
-            auto input = arTensors[0];
             auto indices = input._indices();
             auto values = input._values();
 
@@ -485,17 +538,15 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
                                                    (size_t)indices.numel(),
                                                    values.data_ptr(),
                                                    (size_t)values.numel(),
-                                                   nullptr, nullptr, nullptr, nullptr,
+                                                   nullptr, 0, nullptr, 0,
                                                    cclDatatypes.at(indices.scalar_type()),
                                                    cclDatatypes.at(values.scalar_type()),
                                                    cclOps.at(opts.reduceOp),
                                                    &attr));
         }
     }
-
-    std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
-
-    return std::make_shared<ProcessGroupCCL::WorkCCL>(req, std::move(arTensors), std::move(debugName));
+    work->setRequest(req);
+    return work;
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(

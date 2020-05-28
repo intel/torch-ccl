@@ -67,9 +67,13 @@ class TestSparse(unittest.TestCase, object):
             tensors = [fn(input) for input in inputs]
             print("input: ", tensors[0])
             print("expected: ", outputs[0])
-            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, dist.group.WORLD)
-            print("result: ", tensors[0])
+            work = dist.all_reduce(tensors[0], dist.ReduceOp.SUM, dist.group.WORLD, True)
+            work.wait()
+            results = work.result()
+            print("result_inplace: ", tensors[0])
+            print("result_outofplace: ", results[0])
             self.assertEqual(tensors[0], outputs[0])
+            self.assertEqual(results[0], outputs[0])
             break;
 
     def safeCoalesce(self, t):
@@ -181,7 +185,7 @@ def simple_sparse_reduce_tests(rank, world_size, num_inputs=1):
             ],
         )
         for fn in [
-            partial(generate, sparse_dims=1, dense_dims=2),
+            partial(generate, sparse_dims=1, dense_dims=3),
             #partial(generate, sparse_dims=2),
             #partial(generate, sparse_dims=3),
             #partial(generate, dense_dims=1),

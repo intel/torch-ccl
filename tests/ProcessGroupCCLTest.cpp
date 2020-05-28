@@ -318,63 +318,73 @@ void testSparseAllreduce(int iter = 1000)
     // Verify outputs
     for (int i = 0; i < iter; ++i)
     {
-        auto tensor = allTensors[i][0].coalesce();
-        auto indices = tensor.indices();
-        auto values = tensor.values();
+        std::vector<at::Tensor> resultTensors;
 
-        if (indices.size(1) != totalIndiceCount)
-        {
-            printf("testSparseAllreduce: unexpected indices count: got %ld, expected %zu\n",
-                    indices.size(1), totalIndiceCount);
-            throw std::runtime_error("BOOM!");
-        }
+        // Check in-place and out-of-place results
+        auto oopResults = works[i]->result();
+        resultTensors.push_back(allTensors[i][0].coalesce());
+        resultTensors.push_back(oopResults[0].coalesce());
 
-        if (values.dim() != 2)
+        for (size_t r = 0; r < resultTensors.size(); r++)
         {
-            printf("testSparseAllreduce: unexpected values dim: got %ld, expected 2\n",
-                    values.dim());
-            throw std::runtime_error("BOOM!");
-        }
+            at::Tensor tensor = resultTensors[r];
+            auto indices = tensor.indices();
+            auto values = tensor.values();
 
-        if (values.size(0) != totalIndiceCount)
-        {
-            printf("testSparseAllreduce: unexpected values first dim count: got %zu, expected %zu\n",
-                    values.size(0), totalIndiceCount);
-            throw std::runtime_error("BOOM!");
-        }
-
-        if (values.size(1) != perRankValueCount)
-        {
-            printf("testSparseAllreduce: unexpected values second dim count: got %ld, expected %d\n",
-                    values.size(1), perRankValueCount);
-            throw std::runtime_error("BOOM!");
-        }
-
-        int64_t* indPtr = indices.data_ptr<int64_t>();
-        for (auto j = 0; j < totalIndiceCount; ++j)
-        {
-            if (indPtr[j] != j)
+            if (indices.size(1) != totalIndiceCount)
             {
-                printf("testSparseAllreduce: unexpected index: got %ld, expected %d\n",
-                    indPtr[j], j);
+                printf("testSparseAllreduce: unexpected indices count: got %ld, expected %zu\n",
+                        indices.size(1), totalIndiceCount);
                 throw std::runtime_error("BOOM!");
             }
-        }
 
-        float* valPtr = values.data_ptr<float>();
-        for (auto j = 0; j < worldSize; ++j)
-        {
-            float expected = i * (worldSize - j);
-            for (auto k = 0; k < indiceCountCoeff; ++k)
+            if (values.dim() != 2)
             {
-                for (auto v = 0; v < perRankValueCount; ++v)
+                printf("testSparseAllreduce: unexpected values dim: got %ld, expected 2\n",
+                        values.dim());
+                throw std::runtime_error("BOOM!");
+            }
+
+            if (values.size(0) != totalIndiceCount)
+            {
+                printf("testSparseAllreduce: unexpected values first dim count: got %zu, expected %zu\n",
+                        values.size(0), totalIndiceCount);
+                throw std::runtime_error("BOOM!");
+            }
+
+            if (values.size(1) != perRankValueCount)
+            {
+                printf("testSparseAllreduce: unexpected values second dim count: got %ld, expected %d\n",
+                        values.size(1), perRankValueCount);
+                throw std::runtime_error("BOOM!");
+            }
+
+            int64_t* indPtr = indices.data_ptr<int64_t>();
+            for (auto j = 0; j < totalIndiceCount; ++j)
+            {
+                if (indPtr[j] != j)
                 {
-                    size_t valueIdx = j * indiceCountCoeff * perRankValueCount + k * perRankValueCount + v;
-                    if (valPtr[valueIdx] != expected)
+                    printf("testSparseAllreduce: unexpected index: got %ld, expected %d\n",
+                        indPtr[j], j);
+                    throw std::runtime_error("BOOM!");
+                }
+            }
+
+            float* valPtr = values.data_ptr<float>();
+            for (auto j = 0; j < worldSize; ++j)
+            {
+                float expected = i * (worldSize - j);
+                for (auto k = 0; k < indiceCountCoeff; ++k)
+                {
+                    for (auto v = 0; v < perRankValueCount; ++v)
                     {
-                        printf("testSparseAllreduce: unexpected value[%zu]: got %f, expected %f\n",
-                            valueIdx, valPtr[valueIdx], expected);
-                        throw std::runtime_error("BOOM!");
+                        size_t valueIdx = j * indiceCountCoeff * perRankValueCount + k * perRankValueCount + v;
+                        if (valPtr[valueIdx] != expected)
+                        {
+                            printf("testSparseAllreduce: unexpected value[%zu]: got %f, expected %f\n",
+                                valueIdx, valPtr[valueIdx], expected);
+                            throw std::runtime_error("BOOM!");
+                        }
                     }
                 }
             }

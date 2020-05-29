@@ -66,15 +66,15 @@ std::map<ReduceOp, ccl::reduction> cclOps =
 
 // Type mapping
 #if CCL_MAJOR_VERSION == 0 && CCL_MINOR_VERSION < 6
-std::map<at::ScalarType, ccl::data_type> cclDatatypes =
+std::map<at::ScalarType, ccl::datatype> cclDatatypes =
 {
-    {at::kByte, ccl::data_type::dt_char},
-    {at::kChar, ccl::data_type::dt_char},
-    {at::kDouble, ccl::data_type::dt_double},
-    {at::kBFloat16, ccl::data_type::dt_bfp16},
-    {at::kFloat, ccl::data_type::dt_float},
-    {at::kInt, ccl::data_type::dt_int},
-    {at::kLong, ccl::data_type::dt_int64}
+    {at::kByte, ccl::datatype::dt_char},
+    {at::kChar, ccl::datatype::dt_char},
+    {at::kDouble, ccl::datatype::dt_double},
+    {at::kBFloat16, ccl::datatype::dt_bfp16},
+    {at::kFloat, ccl::datatype::dt_float},
+    {at::kInt, ccl::datatype::dt_int},
+    {at::kLong, ccl::datatype::dt_int64}
 };
 #else
 std::map<at::ScalarType, ccl::datatype> cclDatatypes =

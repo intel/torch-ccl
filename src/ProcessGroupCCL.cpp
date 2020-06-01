@@ -356,8 +356,8 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 }
 
 ProcessGroupCCL::ProcessGroupCCL(int rank, int size, const std::vector<int> ranks)
-    : ProcessGroup(globalComm->rank(),
-                   globalComm->size()),
+    : ProcessGroup(ranks.empty() ? globalComm->rank() : rank,
+                   ranks.empty() ? globalComm->size() : size),
       collAttrAg({})
 {
     std::unique_lock<std::mutex> globalLock(globalMutex);

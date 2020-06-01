@@ -48,7 +48,7 @@ execute_process(
 )
 
 execute_process(
-  COMMAND bash -c "ls ${PYTHON_LIB_PATH} | grep '^libpython.*.so$'"
+  COMMAND bash -c "ls ${PYTHON_LIB_PATH} | grep '^libpython.*.so$' | head -n 1"
   OUTPUT_VARIABLE PYTHON_LIB_NAME
 )
 

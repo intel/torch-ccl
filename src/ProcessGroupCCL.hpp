@@ -86,15 +86,19 @@ public:
           debugName(debugName)
       {}
 
-      template<class ...Args>
       WorkCCL(std::shared_ptr<ccl::request> req,
-              Args&& ...args,
+              std::vector<at::Tensor>&& tensors,
               std::string&& debugName) :
           req(req),
-          tensors(std::forward<Args>(args)...),
+          tensors(std::move(tensors)),
           debugName(debugName)
       {}
 
+      WorkCCL(const std::vector<at::Tensor>& tensors,
+              std::string&& debugName) :
+          tensors(tensors),
+          debugName(debugName)
+      {}
 
       virtual ~WorkCCL();
 
@@ -102,6 +106,17 @@ public:
       bool isSuccess() const override;
       bool wait() override;
       void abort() override;
+
+      void setRequest(std::shared_ptr<ccl::request> r)
+      {
+          TORCH_CHECK(!req, "request is already set");
+          req = r;
+      }
+
+      std::vector<at::Tensor>& getTensors()
+      {
+          return tensors;
+      }
 
   protected:
       std::shared_ptr<ccl::request> req;

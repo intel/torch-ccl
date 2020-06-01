@@ -7,137 +7,102 @@ from torch.autograd import Function
 import torch.distributed as dist
 from functools import partial, reduce
 
-try:
-    import torch_ccl
-except ImportError as e:
-    print(e)
-    torch_ccl = False
+rank = -1
+size = -1
 
-my_rank = -1
-my_size = -1
-my_local_rank = -1
-my_local_size = -1
 
-def env2int(env_list, default = -1):
+def print0(str):
+    if rank == 0: print(str)
+
+
+def print_all(str):
+    for i in range(size):
+        dist.barrier()
+        if i == rank: print(str)
+    dist.barrier()
+
+
+def env2int(env_list, default=-1):
     for e in env_list:
         val = int(os.environ.get(e, -1))
         if val >= 0: return val
     return default
 
-def init_distributed(rank = -1, size = -1, backend=''):
+
+def init_distributed(rank=-1, size=-1):
     global g1
     global g2
     global g3
+    global grps_list
 
-    # guess MPI ranks from env (works for IMPI, OMPI and MVAPICH2)
-    num_mpi_ranks = env2int(['PMI_SIZE', 'OMPI_COMM_WORLD_SIZE', 'MV2_COMM_WORLD_SIZE', 'WORLD_SIZE'])
-    if backend == '' and num_mpi_ranks > 1:
-        if torch_ccl and env2int(['CCL_WORKER_COUNT']) > 0:
-            backend = 'ccl'
-        elif dist.is_mpi_available():
-            backend = 'mpi'
-        else:
-            print("WARNING: MPI multi-process launch detected but PyTorch MPI backend not available.")
-            backend = 'gloo'
+    if rank == -1:
+        rank = env2int(['PMI_RANK'], -1)
+    if size == -1:
+        size = env2int(['PMI_SIZE'], -1)
 
-    if backend != '':
-        #guess Rank and size
-        if rank == -1:
-            rank = env2int(['PMI_RANK', 'OMPI_COMM_WORLD_RANK', 'MV2_COMM_WORLD_RANK', 'RANK'], 0)
-        if size == -1:
-            size = env2int(['PMI_SIZE', 'OMPI_COMM_WORLD_SIZE', 'MV2_COMM_WORLD_SIZE', 'WORLD_SIZE'], 1)
-        if not os.environ.get('RANK', None) and rank != -1: os.environ['RANK'] = str(rank)
-        if not os.environ.get('WORLD_SIZE', None) and size != -1: os.environ['WORLD_SIZE'] = str(size)
-        if not os.environ.get('MASTER_PORT', None): os.environ['MASTER_PORT'] = '29500'
-        if not os.environ.get('MASTER_ADDR', None):
-            local_size = env2int(['MPI_LOCALNRANKS', 'OMPI_COMM_WORLD_LOCAL_SIZE', 'MV2_COMM_WORLD_LOCAL_SIZE'], 1)
-            if local_size != size and backend != 'mpi':
-                print("Warning: Looks like distributed multinode run but MASTER_ADDR env not set, using '127.0.0.1' as default")
-                print("If this run hangs, try exporting rank 0's hostname as MASTER_ADDR")
-            os.environ['MASTER_ADDR'] = '127.0.0.1'
+    if not os.environ.get('MASTER_ADDR', None):
+        local_size = env2int(['MPI_LOCALNRANKS', 'OMPI_COMM_WORLD_LOCAL_SIZE', 'MV2_COMM_WORLD_LOCAL_SIZE'], 1)
+        if local_size != size and backend != 'mpi':
+            print(
+                "Warning: Looks like distributed multinode run but MASTER_ADDR env not set, using '127.0.0.1' as default")
+            print("If this run hangs, try exporting rank 0's hostname as MASTER_ADDR")
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+    if not os.environ.get('MASTER_PORT', None): os.environ['MASTER_PORT'] = '29500'
+    os.environ['RANK'] = os.environ.get('PMI_RANK', -1)
+    os.environ['WORLD_SIZE'] = os.environ.get('PMI_SIZE', -1)
+
+    backend = os.environ.get('BACKEND', 'ccl')
+    if backend == 'ccl':
+        try:
+            import torch_ccl
+        except ImportError as e:
+            print(e)
+            print("can't import torch_ccl module")
+            sys.exit()
 
     if size > 1:
         dist.init_process_group(backend, rank=rank, world_size=size)
-        my_rank = dist.get_rank()
-        my_size = dist.get_world_size()
-        my_local_rank = env2int(['MPI_LOCALRANKID', 'OMPI_COMM_WORLD_LOCAL_RANK', 'MV2_COMM_WORLD_LOCAL_RANK'], 0)
-        my_local_size = env2int(['MPI_LOCALNRANKS', 'OMPI_COMM_WORLD_LOCAL_SIZE', 'MV2_COMM_WORLD_LOCAL_SIZE'], 1)
-        if my_rank == 0: print("Running on %d ranks using %s backend" % (my_size, backend))
+        rank = dist.get_rank()
+        size = dist.get_world_size()
+        if size < 4:
+            print("Number of ranks must be >=4")
+            sys.exit()
         if backend == 'ccl':
             print("Using CCL_ATL_TRANSPORT=%s" % os.environ.get('CCL_ATL_TRANSPORT', '(default)'))
             print("Using CCL_ATL_SHM=%s" % os.environ.get('CCL_ATL_SHM', '(default)'))
             pass
+        g1 = dist.new_group(ranks=[0, 1], backend=backend)
+
+        g2 = dist.new_group(ranks=[2, 3], backend=backend)
+
+        g3 = dist.new_group(ranks=[0, 2, 3], backend=backend)
+
+        grps_list = [dist.group.WORLD, g1, g2, g3]
     else:
-        my_rank = 0
-        my_size = 1
-        my_local_rank = 0
-        my_local_size = 1
+        rank = 0
+        size = 1
 
-    # create 2 subgroups
-    g1 = dist.new_group(ranks=[0, 1], backend=backend)
+    print("rank = %d, size = %d, backend = %s" % (rank, size, backend))
 
-    g2 = dist.new_group(ranks=[2, 3], backend=backend)
-
-    g3 = dist.new_group(ranks=[0, 2, 3], backend=backend)
 
 class TestAllReduce(unittest.TestCase):
     def test_all_reduce_sum(self):
         self._test_all_reduce_sum(lambda t: t)
 
     def _test_all_reduce_sum(self, fn):
-        #print("_test_all_reduce_sum : Main group: rank: ", dist.get_rank(), " : size: ", dist.get_world_size())
+        for i in range(len(grps_list)):
+            g = grps_list[i]
+
+        #print("_test_all_reduce_sum : Group: rank: ", dist.get_rank(), " : size: ", dist.get_world_size())
         tests = simple_allreduce_tests(
-            dist.get_rank(),
-            dist.get_world_size())
+            dist.get_rank(g),
+            dist.get_world_size(g))
 
         for (inputs, outputs) in tests:
             tensors = [fn(input) for input in inputs]
             print("_test_all_reduce_sum : input: ", tensors[0])
             print("_test_all_reduce_sum : expected: ", outputs[0])
-            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, dist.group.WORLD)
-            print("_test_all_reduce_sum : output: ", tensors[0])
-            self.assertEqual(tensors[0], outputs[0])
-            break
-
-        #print("_test_all_reduce_sum : g1: rank: ", dist.get_rank(g1), " : size: ", dist.get_world_size(g1))
-        tests1 = simple_allreduce_tests(
-            dist.get_rank(g1),
-            dist.get_world_size(g1))
-
-        for (inputs, outputs) in tests1:
-            tensors = [fn(input) for input in inputs]
-            print("_test_all_reduce_sum : input: ", tensors[0])
-            print("_test_all_reduce_sum : expected: ", outputs[0])
-            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, g1)
-            print("_test_all_reduce_sum : output: ", tensors[0])
-            self.assertEqual(tensors[0], outputs[0])
-            break
-
-
-        #print("_test_all_reduce_sum : g2: rank: ", dist.get_rank(g2), " : size: ", dist.get_world_size(g2))
-        tests2 = simple_allreduce_tests(
-            dist.get_rank(g2),
-            dist.get_world_size(g2))
-
-        for (inputs, outputs) in tests2:
-            tensors = [fn(input) for input in inputs]
-            print("_test_all_reduce_sum : input: ", tensors[0])
-            print("_test_all_reduce_sum : expected: ", outputs[0])
-            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, g2)
-            print("_test_all_reduce_sum : output: ", tensors[0])
-            self.assertEqual(tensors[0], outputs[0])
-            break
-
-        #print("_test_all_reduce_sum : g3: rank: ", dist.get_rank(g3), " : size: ", dist.get_world_size(g3))
-        tests3 = simple_allreduce_tests(
-            dist.get_rank(g3),
-            dist.get_world_size(g3))
-
-        for (inputs, outputs) in tests3:
-            tensors = [fn(input) for input in inputs]
-            print("_test_all_reduce_sum : input: ", tensors[0])
-            print("_test_all_reduce_sum : expected: ", outputs[0])
-            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, g3)
+            dist.all_reduce(tensors[0], dist.ReduceOp.SUM, g)
             print("_test_all_reduce_sum : output: ", tensors[0])
             self.assertEqual(tensors[0], outputs[0])
             break
@@ -207,6 +172,7 @@ class TestAllReduce(unittest.TestCase):
         else:
             assertTensorsEqual(x, y)
 
+
 def simple_allreduce_tests(rank, world_size):
     tests = [
         (
@@ -219,5 +185,5 @@ def simple_allreduce_tests(rank, world_size):
 
 
 if __name__ == "__main__":
-    init_distributed(backend='ccl')
+    init_distributed()
     unittest.main()

@@ -116,8 +116,7 @@ public:
       friend class ProcessGroupCCL;
   };
 
-  //explicit ProcessGroupCCL(int rank = -1, int size = -1);
-  explicit ProcessGroupCCL(int rank = -1, int size = -1, std::vector<int> ranks = {});
+  explicit ProcessGroupCCL(int rank = -1, int size = -1, const std::vector<int> ranks = {});
   virtual ~ProcessGroupCCL();
 
   std::shared_ptr<ProcessGroup::Work> broadcast(
@@ -201,7 +200,7 @@ public:
       const std::shared_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      std::vector<int> ranks = {},
+      const std::vector<int> ranks = {},
       const std::chrono::duration<float>& timeout = std::chrono::duration<float>(1));
 
 #ifndef PROCESS_GROUP_CCL_TEST
@@ -220,7 +219,7 @@ public:
 
   ccl::coll_attr collAttrAg;
   ccl::communicator_t comm;
-  ccl::comm_attr commAttr;
+  ccl::comm_attr_t commAttr;
 };
 
 } // namespace c10d

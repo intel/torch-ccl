@@ -322,12 +322,12 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const std::shared_ptr<Store>& store,
     int rank,
     int size,
-    std::vector<int> ranks,
+    const std::vector<int> ranks,
     const std::chrono::duration<float>& timeout)
 {
     cclInitOnce();
 
-    if(ranks.empty()) // Creating default root group
+    if (ranks.empty()) // Creating default root group
     {
         TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
             "unexpected rank " + std::to_string(rank) +
@@ -341,6 +341,8 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     }
     else
     {
+        TORCH_CHECK(size == ranks.size());
+
         auto group = std::make_shared<ProcessGroupCCL>(rank, size, ranks);
         if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
         {
@@ -353,33 +355,37 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     }
 }
 
-ProcessGroupCCL::ProcessGroupCCL(int rank, int size, std::vector<int> ranks)
+ProcessGroupCCL::ProcessGroupCCL(int rank, int size, const std::vector<int> ranks)
     : ProcessGroup(globalComm->rank(),
                    globalComm->size()),
       collAttrAg({})
 {
-    if(ranks.empty())
+    std::unique_lock<std::mutex> globalLock(globalMutex);
+
+    if (ranks.empty())
     {
-        std::unique_lock<std::mutex> globalLock(globalMutex);
         CCL_CHECK(comm = ccl::environment::instance().create_communicator());
     }
     else
     {
-        std::unique_lock<std::mutex> globalLock(globalMutex);
+        int color;
+        commAttr = ccl::environment::instance().create_host_comm_attr();
+
         if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
         {
-            commAttr.color = 1;
+            color = 1;
         }
         else
         {
-            commAttr.color = 0;
+            color = 0;
         }
 
-        CCL_CHECK(comm = ccl::environment::instance().create_communicator(&commAttr));
+        commAttr->set_value<ccl_host_color>(color);
+        CCL_CHECK(comm = ccl::environment::instance().create_communicator(commAttr));
 
-        if(commAttr.color ==0)
+        if (commAttr->get_value<ccl_host_color>() == 0)
         {
-            delete comm.release();
+            comm.reset();
         }
     }
 }

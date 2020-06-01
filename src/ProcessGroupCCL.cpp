@@ -331,28 +331,72 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const std::shared_ptr<Store>& store,
     int rank,
     int size,
+    const std::vector<int> ranks,
     const std::chrono::duration<float>& timeout)
 {
     cclInitOnce();
 
-    TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
-        "unexpected rank " + std::to_string(rank) +
-        ", CCL rank " + std::to_string(globalComm->rank()));
+    if (ranks.empty()) // Creating default root group
+    {
+        TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
+            "unexpected rank " + std::to_string(rank) +
+            ", CCL rank " + std::to_string(globalComm->rank()));
 
-    TORCH_CHECK(((size == -1) || (size_t)size == globalComm->size()),
-        "unexpected size " + std::to_string(size) +
-        ", CCL size " + std::to_string(globalComm->size()));
+        TORCH_CHECK(((size == -1) || (size_t)size == globalComm->size()),
+            "unexpected size " + std::to_string(size) +
+            ", CCL size " + std::to_string(globalComm->size()));
 
-    return std::make_shared<ProcessGroupCCL>(rank, size);
+        return std::make_shared<ProcessGroupCCL>(rank, size);
+    }
+    else
+    {
+        TORCH_CHECK(size == ranks.size());
+
+        auto group = std::make_shared<ProcessGroupCCL>(rank, size, ranks);
+        if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
+        {
+            return group;
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
 }
 
-ProcessGroupCCL::ProcessGroupCCL(int rank, int size)
-    : ProcessGroup(globalComm->rank(),
-                   globalComm->size()),
+ProcessGroupCCL::ProcessGroupCCL(int rank, int size, const std::vector<int> ranks)
+    : ProcessGroup(ranks.empty() ? globalComm->rank() : rank,
+                   ranks.empty() ? globalComm->size() : size),
       collAttrAg({})
 {
     std::unique_lock<std::mutex> globalLock(globalMutex);
-    CCL_CHECK(comm = ccl::environment::instance().create_communicator());
+
+    if (ranks.empty())
+    {
+        CCL_CHECK(comm = ccl::environment::instance().create_communicator());
+    }
+    else
+    {
+        int color;
+        commAttr = ccl::environment::instance().create_host_comm_attr();
+
+        if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
+        {
+            color = 1;
+        }
+        else
+        {
+            color = 0;
+        }
+
+        commAttr->set_value<ccl_host_color>(color);
+        CCL_CHECK(comm = ccl::environment::instance().create_communicator(commAttr));
+
+        if (commAttr->get_value<ccl_host_color>() == 0)
+        {
+            comm.reset();
+        }
+    }
 }
 
 ProcessGroupCCL::~ProcessGroupCCL()

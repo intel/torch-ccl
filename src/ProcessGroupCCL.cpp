@@ -30,7 +30,8 @@
  */
 
 #include <map>
-#include <ATen/record_function.h>
+//#include <ATen/record_function.h>
+#include <torch/csrc/autograd/record_function.h>
 
 #include "ProcessGroupCCL.hpp"
 
@@ -350,15 +351,19 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     }
     else
     {
-        TORCH_CHECK(size == ranks.size());
+        TORCH_CHECK((size_t)size == ranks.size(),
+            "unexpected size " + std::to_string(size) +
+            ", ranks size " + std::to_string(ranks.size()));
 
         auto group = std::make_shared<ProcessGroupCCL>(rank, size, ranks);
+
         if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
         {
             return group;
         }
         else
         {
+            group.reset();
             return nullptr;
         }
     }

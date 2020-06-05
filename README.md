@@ -36,7 +36,7 @@ $ source <ccl_install_path>/env/setvars.sh
 4. Install the `torch-ccl` pip package.
 
 ```
-$ pip setup.py install 
+$ python setup.py install 
 ```
 
 

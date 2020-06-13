@@ -48,13 +48,19 @@ std::shared_ptr<c10d::ProcessGroup> createProcessGroup()
     auto store = std::make_shared<c10d::HashStore>();
     std::chrono::duration<float> timeout(1);
 
-    // c10d::ProcessGroupGloo::Options options;
-    // options.timeout = std::chrono::milliseconds(5000);
-    // options.devices.push_back(
-    //     c10d::ProcessGroupGloo::createDeviceForHostname("172.25.69.12"));
-    // return std::make_shared<c10d::ProcessGroupGloo>(store, atoi(getenv("PMI_RANK")), atoi(getenv("PMI_SIZE")), options);
-
-    return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, timeout);
+    // char* backendEnv = getenv("BACKEND");
+    // if (strcmp(backendEnv, "gloo") == 0)
+    // {
+    //     c10d::ProcessGroupGloo::Options options;
+    //     options.timeout = std::chrono::milliseconds(5000);
+    //     options.devices.push_back(
+    //         c10d::ProcessGroupGloo::createDeviceForHostname("10.125.86.190"));
+    //     return std::make_shared<c10d::ProcessGroupGloo>(store, atoi(getenv("PMI_RANK")), atoi(getenv("PMI_SIZE")), options);
+    // }
+    // else
+    {
+        return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, std::vector<int>(), timeout);
+    }
 }
 
 void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,

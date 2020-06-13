@@ -73,6 +73,7 @@ add_definitions(-DPROCESS_GROUP_CCL_TEST)
 # show build info
 message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
 message(STATUS "CXX compiler : ${CMAKE_CXX_COMPILER}")
+message(STATUS "CMAKE_CXX_FLAGS : ${CMAKE_CXX_FLAGS}")
 message(STATUS "TORCH_LIBRARIES : ${TORCH_LIBRARIES}")
 message(STATUS "TORCH_INCLUDE_DIRS : ${TORCH_INCLUDE_DIRS}")
 message(STATUS "TORCH_CXX_FLAGS : ${TORCH_CXX_FLAGS}")

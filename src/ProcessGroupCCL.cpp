@@ -30,10 +30,18 @@
  */
 
 #include <map>
+
 //#include <ATen/record_function.h>
 #include <torch/csrc/autograd/record_function.h>
 
 #include "ProcessGroupCCL.hpp"
+
+#ifndef gettid
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+#define gettid() syscall(SYS_gettid)
+#endif
 
 namespace c10d
 {
@@ -103,6 +111,7 @@ std::map<ccl_datatype_t, at::ScalarType> ptDatatypes =
 static std::once_flag cclInitOnceFlag;
 static std::mutex globalMutex;
 static ccl::communicator_t globalComm;
+static ccl_sparse_coalesce_mode_t coalesceMode;
 
 // Checking the input tensor's validity
 void checkSingleTensorHelper(const at::Tensor& tensor)
@@ -325,6 +334,19 @@ void ProcessGroupCCL::cclInitOnce()
       {
           throw std::runtime_error("failed to register the CCL exit handler");
       }
+
+      coalesceMode = ccl_sparse_coalesce_regular;
+      const char* coalesceModeEnv = getenv("CCL_SPARSE_COALESCE_MODE");
+
+      if (coalesceModeEnv)
+      {
+          coalesceMode = (ccl_sparse_coalesce_mode_t)(atoi(coalesceModeEnv));
+      }
+
+      if (globalComm->rank() == 0)
+      {
+          printf("coalesceMode %d\n", coalesceMode);
+      }
   });
 }
 
@@ -520,10 +542,13 @@ ccl_status_t sparseAllreduceCompletionFn(
     }*/
 
     auto resultTensor =
-        at::sparse_coo_tensor(indices,
-                              values,
-                              inputTensor.sizes(),
-                              inputTensor.options());
+        at::_sparse_coo_tensor_unsafe(indices,
+                                      values,
+                                      inputTensor.sizes(),
+                                      inputTensor.options());
+
+    if (coalesceMode != ccl_sparse_coalesce_disable)
+        resultTensor._coalesced_(true);
 
     /* propagate resultTensor using 2 ways - inputTensors and outputTensors */
     for (size_t i = 0; i < inputTensors.size(); i++)
@@ -547,21 +572,21 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
     std::vector<at::Tensor>& tensors,
     const AllreduceOptions& opts)
 {
-    RECORD_FUNCTION("pg::allreduce", std::vector<c10::IValue>({tensors[0]}));
+    const auto& layout = tensors[0].layout();
+    std::string funcName = (layout == c10::kStrided) ? "pg::allreduce" : "pg::sparse_allreduce";
+    RECORD_FUNCTION(funcName, std::vector<c10::IValue>({tensors[0]}));
 
     checkSingleTensor(tensors);
 
-    const auto& layout = tensors[0].layout();
     std::shared_ptr<ccl::request> req;
     std::shared_ptr<ProcessGroupCCL::WorkCCL> work;
-
-    std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
 
     {
         std::unique_lock<std::mutex> globalLock(globalMutex);
 
         if (layout == c10::kStrided)
         {
+            std::string debugName = std::string("allreduce::sz:") + std::to_string(tensors[0].numel());
             work = std::make_shared<ProcessGroupCCL::WorkCCL>(tensors, std::move(debugName));
             CCL_CHECK(req = comm->allreduce(tensors[0].data_ptr(),
                                             tensors[0].data_ptr(),
@@ -571,17 +596,22 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
         }
         else if (layout == c10::kSparse)
         {
-            work = std::make_shared<SparseAllreduceWork>(tensors, std::move(debugName));
-
             at::Tensor input = tensors[0];
             TORCH_CHECK(input.sparse_dim() == 1, "allreduce: only single sparse_dim is supported");
+
+            auto indices = input._indices();
+            auto values = input._values();
+
+            std::string debugName =
+                std::string("sparse_allreduce::ind_sz:") + std::to_string(indices.numel()) +
+                std::string(":val_sz:") + std::to_string(values.numel());
+
+            work = std::make_shared<SparseAllreduceWork>(tensors, std::move(debugName));
 
             ccl::coll_attr attr{};
             attr.sparse_allreduce_completion_fn = sparseAllreduceCompletionFn;
             attr.sparse_allreduce_completion_ctx = work.get();
-
-            auto indices = input._indices();
-            auto values = input._values();
+            attr.sparse_coalesce_mode = coalesceMode;
 
             CCL_CHECK(req = comm->sparse_allreduce(indices.data_ptr(),
                                                    (size_t)indices.numel(),

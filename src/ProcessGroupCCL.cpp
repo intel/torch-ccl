@@ -31,6 +31,8 @@
 
 #include <map>
 
+#include <omp.h>
+
 //#include <ATen/record_function.h>
 #include <torch/csrc/autograd/record_function.h>
 
@@ -108,10 +110,25 @@ std::map<ccl_datatype_t, at::ScalarType> ptDatatypes =
 };
 #endif
 
+enum class
+SparseResultMode : std::uint8_t
+{
+    DIRECT,
+    OOP,
+    COPY
+};
+
+std::ostream& operator << (std::ostream& os, const SparseResultMode& mode)
+{
+   os << static_cast<std::underlying_type<SparseResultMode>::type>(mode);
+   return os;
+}
+
 static std::once_flag cclInitOnceFlag;
 static std::mutex globalMutex;
 static ccl::communicator_t globalComm;
-static ccl_sparse_coalesce_mode_t coalesceMode;
+static ccl_sparse_coalesce_mode_t sparseCoalesceMode;
+static SparseResultMode sparseResultMode;
 
 // Checking the input tensor's validity
 void checkSingleTensorHelper(const at::Tensor& tensor)
@@ -335,17 +352,24 @@ void ProcessGroupCCL::cclInitOnce()
           throw std::runtime_error("failed to register the CCL exit handler");
       }
 
-      coalesceMode = ccl_sparse_coalesce_regular;
-      const char* coalesceModeEnv = getenv("CCL_SPARSE_COALESCE_MODE");
-
-      if (coalesceModeEnv)
+      sparseCoalesceMode = ccl_sparse_coalesce_regular;
+      const char* sparseCoalesceModeEnv = getenv("CCL_SPARSE_COALESCE_MODE");
+      if (sparseCoalesceModeEnv)
       {
-          coalesceMode = (ccl_sparse_coalesce_mode_t)(atoi(coalesceModeEnv));
+          sparseCoalesceMode = (ccl_sparse_coalesce_mode_t)(atoi(sparseCoalesceModeEnv));
+      }
+
+      sparseResultMode = SparseResultMode::DIRECT;
+      const char* sparseResultModeEnv = getenv("CCL_SPARSE_RESULT_MODE");
+      if (sparseResultModeEnv)
+      {
+          sparseResultMode = (SparseResultMode)atoi(sparseResultModeEnv);
       }
 
       if (globalComm->rank() == 0)
       {
-          printf("coalesceMode %d\n", coalesceMode);
+          printf("sparse options: coalesce mode %d, result mode %d\n",
+                 sparseCoalesceMode, (int)sparseResultMode);
       }
   });
 }
@@ -483,19 +507,19 @@ private:
 ccl_status_t sparseAllreduceCompletionFn(
     const void* indBuf, size_t indCount, ccl_datatype_t indDatatype,
     const void* valBuf, size_t valCount, ccl_datatype_t valDatatype,
-    const ccl_fn_context_t* fnCtx, const void* userCtx)
+    const void* fnCtx)
 {
-    TORCH_CHECK(userCtx, "null user ctx");
+    TORCH_CHECK(fnCtx, "null fn ctx");
 
     /*printf("sparseAllreduceCompletionFn: "
            "indices buf %p, count %zu, dt %d, "
            "values buf %p, count %zu, dt %d, "
-           "fn_ctx %p, user_ctx %p\n",
+           "fn_ctx %p\n",
            indBuf, indCount, indDatatype,
            valBuf, valCount, valDatatype,
-           fnCtx, userCtx); fflush(stdout);*/
+           fnCtx); fflush(stdout);*/
 
-    SparseAllreduceWork* work = (SparseAllreduceWork*)(userCtx);
+    SparseAllreduceWork* work = (SparseAllreduceWork*)(fnCtx);
 
     std::vector<at::Tensor>& inputTensors = work->getTensors();
     std::vector<at::Tensor>& outputTensors = work->getOutputTensors();
@@ -547,23 +571,91 @@ ccl_status_t sparseAllreduceCompletionFn(
                                       inputTensor.sizes(),
                                       inputTensor.options());
 
-    if (coalesceMode != ccl_sparse_coalesce_disable)
+    if (sparseCoalesceMode != ccl_sparse_coalesce_disable)
         resultTensor._coalesced_(true);
 
-    /* propagate resultTensor using 2 ways - inputTensors and outputTensors */
-    for (size_t i = 0; i < inputTensors.size(); i++)
+    if (sparseResultMode == SparseResultMode::COPY)
     {
-        inputTensors[i].copy_(resultTensor);
-
-        if (resultTensor.is_sparse())
+        /* propagate result using 2 ways - inputTensors and outputTensors */
+        for (size_t i = 0; i < inputTensors.size(); i++)
         {
-            outputTensors.push_back(resultTensor.clone());
-        }
-        else
-        {
-            outputTensors.push_back(resultTensor.clone(at::MemoryFormat::Contiguous));
+            inputTensors[i].copy_(resultTensor);
+            if (resultTensor.is_sparse())
+            {
+                outputTensors.push_back(resultTensor.clone());
+            }
+            else
+            {
+                outputTensors.push_back(resultTensor.clone(at::MemoryFormat::Contiguous));
+            }
         }
     }
+    else if (sparseResultMode == SparseResultMode::OOP)
+    {
+        /* propagate result using 1 way - outputTensors */
+        TORCH_CHECK(resultTensor.layout() == c10::kSparse, "unexpected tensor layout");
+        outputTensors.push_back(resultTensor);
+    }
+    else
+    {
+        TORCH_CHECK(0, "unexpected sparseResultMode ", sparseResultMode);
+    }
+
+    return ccl_status_success;
+}
+
+ccl_status_t sparseAllreduceAllocFn(
+    size_t indCount, ccl_datatype_t indDatatype,
+    size_t valCount, ccl_datatype_t valDatatype,
+    const void* fnCtx, void** outIndBuf, void** outValBuf)
+{
+    TORCH_CHECK(fnCtx, "fnCtx");
+    TORCH_CHECK(outIndBuf, "outIndBuf");
+    TORCH_CHECK(outValBuf, "outValBuf");
+
+    TORCH_CHECK(sparseResultMode == SparseResultMode::DIRECT,
+                "unexpected sparseResultMode ", sparseResultMode);
+
+    SparseAllreduceWork* work = (SparseAllreduceWork*)(fnCtx);
+
+    std::vector<at::Tensor>& inputTensors = work->getTensors();
+    std::vector<at::Tensor>& outputTensors = work->getOutputTensors();
+
+    TORCH_CHECK(inputTensors.size() == 1, "unexpected inputTensors size");
+    TORCH_CHECK(outputTensors.size() == 0, "unexpected outputTensors size");
+
+    outputTensors.reserve(inputTensors.size());
+
+    at::Tensor& inputTensor = inputTensors[0];
+
+    TORCH_CHECK(inputTensor.sparse_dim() == 1, "unexpected sparse_dim");
+
+    const auto valueShape = inputTensor.sizes().slice(inputTensor.sparse_dim());
+    auto resultValueShape = std::vector<int64_t>({(int64_t)indCount});
+    std::copy(valueShape.begin(), valueShape.end(), std::back_inserter(resultValueShape));
+
+    auto indices = at::empty({1, (long int)indCount}, inputTensor._indices().options());
+    auto values = at::empty(resultValueShape,
+                            inputTensor._values().options());
+
+    auto resultTensor =
+        at::_sparse_coo_tensor_unsafe(indices,
+                                      values,
+                                      inputTensor.sizes(),
+                                      inputTensor.options());
+
+    if (sparseCoalesceMode != ccl_sparse_coalesce_disable)
+        resultTensor._coalesced_(true);
+
+    /* propagate result using 1 way - outputTensors */
+    TORCH_CHECK(resultTensor.layout() == c10::kSparse, "unexpected tensor layout");
+    outputTensors.push_back(resultTensor);
+
+    *outIndBuf = resultTensor._indices().data_ptr();
+    *outValBuf = resultTensor._values().data_ptr();
+
+    TORCH_CHECK(*outIndBuf, "result outIndBuf");
+    TORCH_CHECK(*outValBuf, "result outValBuf");
 
     return ccl_status_success;
 }
@@ -609,9 +701,13 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
             work = std::make_shared<SparseAllreduceWork>(tensors, std::move(debugName));
 
             ccl::coll_attr attr{};
-            attr.sparse_allreduce_completion_fn = sparseAllreduceCompletionFn;
-            attr.sparse_allreduce_completion_ctx = work.get();
-            attr.sparse_coalesce_mode = coalesceMode;
+
+            if (sparseResultMode == SparseResultMode::DIRECT)
+                attr.sparse_allreduce_alloc_fn = sparseAllreduceAllocFn;
+            else
+                attr.sparse_allreduce_completion_fn = sparseAllreduceCompletionFn;
+            attr.sparse_allreduce_fn_ctx = work.get();
+            attr.sparse_coalesce_mode = sparseCoalesceMode;
 
             CCL_CHECK(req = comm->sparse_allreduce(indices.data_ptr(),
                                                    (size_t)indices.numel(),

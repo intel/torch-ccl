@@ -62,7 +62,7 @@ execute_process(
 )
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_PATH})
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS} -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS} -g -fopenmp")
 
 link_directories(${TORCH_PATH}/lib $ENV{CCL_ROOT}/lib ${PYTHON_LIB_PATH})
 set(CMAKE_INSTALL_RPATH ${PYTHON_LIB_PATH})

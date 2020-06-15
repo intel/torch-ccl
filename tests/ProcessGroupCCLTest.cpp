@@ -31,10 +31,18 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <omp.h>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <unistd.h>
+
+#ifndef gettid
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+#define gettid() syscall(SYS_gettid)
+#endif
 
 #include <c10d/HashStore.hpp>
 #include <c10d/ProcessGroup.hpp>
@@ -262,7 +270,7 @@ void testAllreduce(int iter = 1000)
         printf("testAllreduce: passed\n");
 }
 
-void testSparseAllreduce(int iter = 1000)
+void testSparseAllreduce(int iter = 50)
 {
     auto pg = createProcessGroup();
 
@@ -270,7 +278,7 @@ void testSparseAllreduce(int iter = 1000)
     auto worldSize = pg->getSize();
 
     const int indiceCountCoeff = 16;
-    const int perRankValueCount = 256;
+    const int perRankValueCount = 25600;
 
     // Generate inputs
     std::vector<std::vector<at::Tensor>> allTensors(iter);
@@ -328,7 +336,7 @@ void testSparseAllreduce(int iter = 1000)
 
         // Check in-place and out-of-place results
         auto oopResults = works[i]->result();
-        resultTensors.push_back(allTensors[i][0].coalesce());
+        //resultTensors.push_back(allTensors[i][0].coalesce());
         resultTensors.push_back(oopResults[0].coalesce());
 
         for (size_t r = 0; r < resultTensors.size(); r++)

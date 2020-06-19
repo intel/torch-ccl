@@ -64,7 +64,7 @@ def init_distributed(rank=-1, size=-1):
     global g1
     global g2
     global g3
-    global grps_list
+    global group_list
 
     if rank == -1:
         rank = env2int(['PMI_RANK'], -1)
@@ -95,20 +95,16 @@ def init_distributed(rank=-1, size=-1):
         dist.init_process_group(backend, rank=rank, world_size=size)
         rank = dist.get_rank()
         size = dist.get_world_size()
+
         if size < 4:
             print("Number of ranks must be >=4")
             sys.exit()
-        if backend == 'ccl':
-            print("Using CCL_ATL_TRANSPORT=%s" % os.environ.get('CCL_ATL_TRANSPORT', '(default)'))
-            print("Using CCL_ATL_SHM=%s" % os.environ.get('CCL_ATL_SHM', '(default)'))
-            pass
+
         g1 = dist.new_group(ranks=[0, 1], backend=backend)
-
         g2 = dist.new_group(ranks=[2, 3], backend=backend)
-
         g3 = dist.new_group(ranks=[0, 2, 3], backend=backend)
+        group_list = [dist.group.WORLD, g1, g2, g3]
 
-        grps_list = [dist.group.WORLD, g1, g2, g3]
     else:
         rank = 0
         size = 1
@@ -121,20 +117,21 @@ class TestAllReduce(unittest.TestCase):
         self._test_all_reduce_sum(lambda t: t)
 
     def _test_all_reduce_sum(self, fn):
-        for i in range(len(grps_list)):
-            g = grps_list[i]
+        for i in range(len(group_list)):
+            g = group_list[i]
 
-        #print("_test_all_reduce_sum : Group: rank: ", dist.get_rank(), " : size: ", dist.get_world_size())
+        print("group: rank: ", dist.get_rank(), " : size: ", dist.get_world_size())
+
         tests = simple_allreduce_tests(
             dist.get_rank(g),
             dist.get_world_size(g))
 
         for (inputs, outputs) in tests:
             tensors = [fn(input) for input in inputs]
-            print("_test_all_reduce_sum : input: ", tensors[0])
-            print("_test_all_reduce_sum : expected: ", outputs[0])
+            print("input: ", tensors[0])
+            print("expected: ", outputs[0])
             dist.all_reduce(tensors[0], dist.ReduceOp.SUM, g)
-            print("_test_all_reduce_sum : output: ", tensors[0])
+            print("output: ", tensors[0])
             self.assertEqual(tensors[0], outputs[0])
             break
 

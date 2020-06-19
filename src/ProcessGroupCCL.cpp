@@ -383,7 +383,7 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 {
     cclInitOnce();
 
-    if (ranks.empty()) // Creating default root group
+    if (ranks.empty()) // create default process group
     {
         TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
             "unexpected rank " + std::to_string(rank) +

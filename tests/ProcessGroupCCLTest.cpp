@@ -31,10 +31,11 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <omp.h>
 #include <sstream>
 #include <string>
 #include <thread>
+
+#include <omp.h>
 #include <unistd.h>
 
 #ifndef gettid
@@ -49,26 +50,11 @@
 
 #include "ProcessGroupCCL.hpp"
 
-//#include <c10d/ProcessGroupGloo.hpp>
-
 std::shared_ptr<c10d::ProcessGroup> createProcessGroup()
 {
     auto store = std::make_shared<c10d::HashStore>();
     std::chrono::duration<float> timeout(1);
-
-    // char* backendEnv = getenv("BACKEND");
-    // if (strcmp(backendEnv, "gloo") == 0)
-    // {
-    //     c10d::ProcessGroupGloo::Options options;
-    //     options.timeout = std::chrono::milliseconds(5000);
-    //     options.devices.push_back(
-    //         c10d::ProcessGroupGloo::createDeviceForHostname("10.125.86.190"));
-    //     return std::make_shared<c10d::ProcessGroupGloo>(store, atoi(getenv("PMI_RANK")), atoi(getenv("PMI_SIZE")), options);
-    // }
-    // else
-    {
-        return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, std::vector<int>(), timeout);
-    }
+    return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, std::vector<int>(), timeout);
 }
 
 void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,
@@ -277,8 +263,8 @@ void testSparseAllreduce(int iter = 50)
     auto rank = pg->getRank();
     auto worldSize = pg->getSize();
 
-    const int indiceCountCoeff = 16;
-    const int perRankValueCount = 25600;
+    const int indiceCountCoeff = 128;
+    const int perRankValueCount = 32768;
 
     // Generate inputs
     std::vector<std::vector<at::Tensor>> allTensors(iter);
@@ -880,6 +866,8 @@ void testScatter(int iter = 1000)
 
 int main(int argc, char** argv)
 {
+    printf("omp_get_num_threads = %d\n", omp_get_num_threads());
+
     testAllgatherFlat();
     testAllgatherNotFlat();
     testAllreduce();

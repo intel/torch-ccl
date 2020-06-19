@@ -31,14 +31,13 @@
 
 #pragma once
 
-#include <exception>
-#include <memory>
-#include <mutex>
-
 #ifndef PROCESS_GROUP_CCL_TEST
 #include <pybind11/chrono.h>
 #endif
 
+#include <exception>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 #include <c10d/ProcessGroup.hpp>
@@ -86,15 +85,19 @@ public:
           debugName(debugName)
       {}
 
-      template<class ...Args>
       WorkCCL(std::shared_ptr<ccl::request> req,
-              Args&& ...args,
+              std::vector<at::Tensor>&& tensors,
               std::string&& debugName) :
           req(req),
-          tensors(std::forward<Args>(args)...),
+          tensors(std::move(tensors)),
           debugName(debugName)
       {}
 
+      WorkCCL(const std::vector<at::Tensor>& tensors,
+              std::string&& debugName) :
+          tensors(tensors),
+          debugName(debugName)
+      {}
 
       virtual ~WorkCCL();
 
@@ -102,6 +105,17 @@ public:
       bool isSuccess() const override;
       bool wait() override;
       void abort() override;
+
+      void setRequest(std::shared_ptr<ccl::request> r)
+      {
+          TORCH_CHECK(!req, "request is already set");
+          req = r;
+      }
+
+      std::vector<at::Tensor>& getTensors()
+      {
+          return tensors;
+      }
 
   protected:
       std::shared_ptr<ccl::request> req;
@@ -116,7 +130,7 @@ public:
       friend class ProcessGroupCCL;
   };
 
-  explicit ProcessGroupCCL(int rank = -1, int size = -1);
+  explicit ProcessGroupCCL(int rank = -1, int size = -1, const std::vector<int> ranks = {});
   virtual ~ProcessGroupCCL();
 
   std::shared_ptr<ProcessGroup::Work> broadcast(
@@ -198,9 +212,10 @@ public:
   // create a new ProcessGroupCCL and initialize CCL if not initialized
   static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
       const std::shared_ptr<Store>& store,
-      int rank,
-      int size,
-      const std::chrono::duration<float>& timeout);
+      int rank = -1,
+      int size = -1,
+      const std::vector<int> ranks = {},
+      const std::chrono::duration<float>& timeout = std::chrono::duration<float>(1));
 
 #ifndef PROCESS_GROUP_CCL_TEST
   static void ProcessGroupCCLConstructor() __attribute__((constructor))
@@ -218,6 +233,7 @@ public:
 
   ccl::coll_attr collAttrAg;
   ccl::communicator_t comm;
+  ccl::comm_attr_t commAttr;
 };
 
 } // namespace c10d

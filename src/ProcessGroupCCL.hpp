@@ -214,7 +214,6 @@ public:
       const std::shared_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      const std::vector<int> ranks = {},
       const std::chrono::duration<float>& timeout = std::chrono::duration<float>(1));
 
 #ifndef PROCESS_GROUP_CCL_TEST

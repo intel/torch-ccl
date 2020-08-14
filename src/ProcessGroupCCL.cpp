@@ -378,41 +378,19 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const std::shared_ptr<Store>& store,
     int rank,
     int size,
-    const std::vector<int> ranks,
     const std::chrono::duration<float>& timeout)
 {
     cclInitOnce();
 
-    if (ranks.empty()) // create default process group
-    {
-        TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
-            "unexpected rank " + std::to_string(rank) +
-            ", CCL rank " + std::to_string(globalComm->rank()));
+    TORCH_CHECK(((rank == -1) || (size_t)rank == globalComm->rank()),
+        "unexpected rank " + std::to_string(rank) +
+        ", CCL rank " + std::to_string(globalComm->rank()));
 
-        TORCH_CHECK(((size == -1) || (size_t)size == globalComm->size()),
-            "unexpected size " + std::to_string(size) +
-            ", CCL size " + std::to_string(globalComm->size()));
+    TORCH_CHECK(((size == -1) || (size_t)size == globalComm->size()),
+        "unexpected size " + std::to_string(size) +
+        ", CCL size " + std::to_string(globalComm->size()));
 
-        return std::make_shared<ProcessGroupCCL>(rank, size);
-    }
-    else
-    {
-        TORCH_CHECK((size_t)size == ranks.size(),
-            "unexpected size " + std::to_string(size) +
-            ", ranks size " + std::to_string(ranks.size()));
-
-        auto group = std::make_shared<ProcessGroupCCL>(rank, size, ranks);
-
-        if (std::find(ranks.begin(), ranks.end(), rank) != ranks.end())
-        {
-            return group;
-        }
-        else
-        {
-            group.reset();
-            return nullptr;
-        }
-    }
+    return std::make_shared<ProcessGroupCCL>(rank, size);
 }
 
 ProcessGroupCCL::ProcessGroupCCL(int rank, int size, const std::vector<int> ranks)
@@ -1207,7 +1185,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
 }
 
 #ifndef PROCESS_GROUP_CCL_TEST
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+PYBIND11_MODULE(torch_ccl, m)
 {
     m.def("createProcessGroupCCL", &ProcessGroupCCL::createProcessGroupCCL);
 }

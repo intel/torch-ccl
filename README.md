@@ -25,7 +25,11 @@ To install `torch-ccl`:
 
 1. Install PyTorch.
 
-2. Install Intel oneCCL (please refer to [this page](https://oneapi-src.github.io/oneCCL/installation.html)).
+2. Install the `torch-ccl`.
+
+```
+$ python setup.py install
+```
 
 3. Source the oneCCL environment.
 
@@ -33,11 +37,6 @@ To install `torch-ccl`:
 $ source <ccl_install_path>/env/setvars.sh
 ```
 
-4. Install the `torch-ccl` pip package.
-
-```
-$ python setup.py install
-```
 
 
 # Usage

@@ -14,9 +14,9 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 # Requirements
 
-PyTorch (development version with external ProcessGroup [support](https://github.com/pytorch/pytorch/commit/762270c51faa845b3fbb5a6779813d537f48e2e8)).
+PyTorch (1.5.0 or higher).
 
-Intel® oneAPI Collective Communications Library (2021.1-beta05 or newer).
+Intel® oneAPI Collective Communications Library (2021.1-beta05 or higher).
 
 
 # Installation
@@ -25,7 +25,11 @@ To install `torch-ccl`:
 
 1. Install PyTorch.
 
-2. Install Intel oneCCL (please refer to [this page](https://oneapi-src.github.io/oneCCL/installation.html)).
+2. Install the `torch-ccl`.
+
+```
+$ python setup.py install
+```
 
 3. Source the oneCCL environment.
 
@@ -33,11 +37,6 @@ To install `torch-ccl`:
 $ source <ccl_install_path>/env/setvars.sh
 ```
 
-4. Install the `torch-ccl` pip package.
-
-```
-$ python setup.py install 
-```
 
 
 # Usage
@@ -78,7 +77,7 @@ $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 
 # Performance Debugging
 
-For debugging performance of communication primitives PyTorch's [Autograd profiler](https://pytorch.org/docs/stable/autograd.html#profiler) 
+For debugging performance of communication primitives PyTorch's [Autograd profiler](https://pytorch.org/docs/stable/autograd.html#profiler)
 can be used to inspect time spent inside oneCCL calls.
 
 Example:

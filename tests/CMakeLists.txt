@@ -48,7 +48,7 @@ execute_process(
 )
 
 execute_process(
-  COMMAND bash -c "ls ${PYTHON_LIB_PATH} | grep '^libpython.*.so$'"
+  COMMAND bash -c "ls ${PYTHON_LIB_PATH} | grep '^libpython.*.so$' | head -n 1"
   OUTPUT_VARIABLE PYTHON_LIB_NAME
 )
 
@@ -62,7 +62,7 @@ execute_process(
 )
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_PATH})
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS} -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS} -g -fopenmp")
 
 link_directories(${TORCH_PATH}/lib $ENV{CCL_ROOT}/lib ${PYTHON_LIB_PATH})
 set(CMAKE_INSTALL_RPATH ${PYTHON_LIB_PATH})
@@ -73,6 +73,7 @@ add_definitions(-DPROCESS_GROUP_CCL_TEST)
 # show build info
 message(STATUS "C compiler : ${CMAKE_C_COMPILER}")
 message(STATUS "CXX compiler : ${CMAKE_CXX_COMPILER}")
+message(STATUS "CMAKE_CXX_FLAGS : ${CMAKE_CXX_FLAGS}")
 message(STATUS "TORCH_LIBRARIES : ${TORCH_LIBRARIES}")
 message(STATUS "TORCH_INCLUDE_DIRS : ${TORCH_INCLUDE_DIRS}")
 message(STATUS "TORCH_CXX_FLAGS : ${TORCH_CXX_FLAGS}")

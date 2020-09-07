@@ -103,7 +103,7 @@ public:
 
       bool isCompleted() override;
       bool isSuccess() const override;
-      bool wait() override;
+      bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
       void abort() override;
 
       void setRequest(std::shared_ptr<ccl::request> r)

@@ -178,28 +178,6 @@ void checkSameType(const at::Tensor& tensor,
     }
 }
 
-void checkSplitSizes(
-    const std::vector<int64_t>& split_sizes,
-    const at::Tensor& tensor,
-    int groupSize)
-{
-    if (split_sizes.size() == 0)
-    {
-        TORCH_CHECK(tensor.size(0) % groupSize == 0,
-            "tensor's dim 0 does not divide equally across group size");
-    }
-    else
-    {
-        TORCH_CHECK(split_sizes.size() == (size_t)groupSize,
-            "number of tensor splits not equal to group size");
-
-        int sum = std::accumulate(split_sizes.begin(), split_sizes.end(), 0);
-
-        TORCH_CHECK(sum == tensor.size(0),
-            "split sizes doesn't match total dim 0 size");
-    }
-}
-
 typedef struct
 {
     bool isFlat;
@@ -311,7 +289,7 @@ bool ProcessGroupCCL::WorkCCL::isSuccess() const
     return true;
 }
 
-bool ProcessGroupCCL::WorkCCL::wait()
+bool ProcessGroupCCL::WorkCCL::wait(std::chrono::milliseconds timeout)
 {
     if (!req)
     {

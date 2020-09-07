@@ -34,7 +34,8 @@ $ python setup.py install
 3. Source the oneCCL environment.
 
 ```
-$ source <torch_ccl_install_path>/ccl/env/setvars.sh
+$ torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
+$ source $torch_ccl_path/ccl/env/setvars.sh
 ```
 
 
@@ -70,7 +71,8 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```
 
 ```
-$ source <ccl_install_path>/env/setvars.sh
+$ torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
+$ source $torch_ccl_path/ccl/env/setvars.sh
 $ mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 ```
 
@@ -108,7 +110,8 @@ print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_
 ```
 
 ```
-$ source <ccl_install_path>/env/setvars.sh
+$ torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
+$ source $torch_ccl_path/ccl/env/setvars.sh
 $ mpirun -n 2 -l python profiling.py
 ```
 

@@ -9,29 +9,41 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 [Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective commnications library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, alltoall. For more information on oneCCL, please refer to the [oneCCL documentation](https://oneapi-src.github.io/oneCCL).
 
-`torch-ccl` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup.
+`torch-ccl` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now.
 
+# Pytorch API Align
+We recommend Anaconda as Python package management system. The following is the corresponding branchs (tags) of torch-ccl and supported Pytorch.
+
+   | ``torch`` | ``torch-ccl`` |  
+   | :-----:| :---: |  
+   |  ``master`` |  ``master``  |
+   | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0) |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)   | 
+   | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3) |   [2021.1-beta09](https://github.com/intel/torch-ccl/tree/2021.1-beta09)   |
+
+The usage details can be found in the README of corresponding branch. The following part is about the usage of master. if you want to use other version of torch-ccl please checkout to that branch(tag).
 
 # Requirements
 
-PyTorch (1.5.0 or higher).
+Python 3.6 or later and a C++14 compiler
 
-Intel® oneAPI Collective Communications Library (2021.1-beta05 or higher).
-
+PyTorch master branch.
 
 # Installation
 
 To install `torch-ccl`:
 
-1. Install PyTorch.
+1. Install [PyTorch](https://github.com/pytorch/pytorch) from source code.
 
 2. Install the `torch-ccl`.
 
-```
-$ python setup.py install
+```bash
+ git clone https://github.com/intel/torch-ccl.git && cd torch-ccl 
+ git submodule sync 
+ git submodule update --init --recursive 
+ python setup.py install
 ```
 
-3. Source the oneCCL environment.
+3. oneCCL is used as third party repo of torch-ccl but you need to source the oneCCL environment before runing.
 
 ```
 $ torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")

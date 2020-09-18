@@ -25,14 +25,15 @@ add_subdirectory(third_party/pybind11)
 pybind11_add_module(${PLUGIN_NAME} SHARED src/ProcessGroupCCL.cpp)
 include_directories(${PROJECT_SOURCE_DIR}/build/third_party/pybind11/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
-include_directories(${PROJECT_SOURCE_DIR}/build/third_party/oneCCL/include)
+include_directories(${PROJECT_SOURCE_DIR}/third_party/oneCCL/include)
 
 add_dependencies(${PLUGIN_NAME} ccl)
 add_dependencies(${PLUGIN_NAME} pybind11)
 
-target_link_libraries(${PLUGIN_NAME} PUBLIC ccl)
+
 link_directories(${PYTORCH_INSTALL_DIR}/lib)
 target_link_libraries(${PLUGIN_NAME} PUBLIC ${PYTORCH_INSTALL_DIR}/lib/libtorch_python.so)
 target_link_libraries(${PLUGIN_NAME} PUBLIC ${PYTORCH_INSTALL_DIR}/lib/libtorch_cpu.so)
 target_link_libraries(${PLUGIN_NAME} PUBLIC ${PYTORCH_INSTALL_DIR}/lib/libc10.so)
+target_link_libraries(${PLUGIN_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/build/third_party/oneCCL/src/libccl.a)
 target_compile_options(${PLUGIN_NAME} PRIVATE "-DC10_BUILD_MAIN_LIB")

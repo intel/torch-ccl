@@ -1,7 +1,6 @@
 [submodule "third_party/oneCCL"]
 	path = third_party/oneCCL
 	url = https://github.com/oneapi-src/oneCCL.git
-        branch = 2021.1-beta07-1
 [submodule "third_party/pybind11"]
 	path = third_party/pybind11
 	url = https://github.com/pybind/pybind11.git

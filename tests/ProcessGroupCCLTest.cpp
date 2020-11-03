@@ -50,15 +50,15 @@
 
 #include "ProcessGroupCCL.hpp"
 
-std::shared_ptr<c10d::ProcessGroup> createProcessGroup()
+c10::intrusive_ptr<c10d::ProcessGroup> createProcessGroup()
 {
     auto store = std::make_shared<c10d::HashStore>();
     std::chrono::duration<float> timeout(1);
     return c10d::ProcessGroupCCL::createProcessGroupCCL(store, -1, -1, std::vector<int>(), timeout);
 }
 
-void waitWork(std::shared_ptr<c10d::ProcessGroup> pg,
-              std::vector<std::shared_ptr<c10d::ProcessGroup::Work>> works)
+void waitWork(c10::intrusive_ptr<c10d::ProcessGroup> pg,
+              std::vector<c10::intrusive_ptr<c10d::ProcessGroup::Work>> works)
 {
     for (auto& work : works)
     {
@@ -113,11 +113,11 @@ void testAllgatherFlat(int iter = 1000)
         }
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->allgather(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
@@ -172,11 +172,11 @@ void testAllgatherNotFlat(int iter = 1000)
         }
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->allgather(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
@@ -224,11 +224,11 @@ void testAllreduce(int iter = 1000)
         allTensors[i] = std::vector<at::Tensor>({tensor});
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto& tensors : allTensors)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->allreduce(tensors);
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work = pg->allreduce(tensors);
         works.push_back(std::move(work));
     }
 
@@ -305,11 +305,11 @@ void testSparseAllreduce(int iter = 50)
         allTensors[i] = std::vector<at::Tensor>({tensor});
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto& tensors : allTensors)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->allreduce(tensors);
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work = pg->allreduce(tensors);
         works.push_back(std::move(work));
     }
 
@@ -420,12 +420,12 @@ void testAlltoallBase(int iter = 1000)
     }
 
     std::vector<int64_t> splitSizes;
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
 
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->alltoall_base(allOutputTensors[i], allInputTensors[i],
                               splitSizes, splitSizes);
         works.push_back(std::move(work));
@@ -492,11 +492,11 @@ void testAlltoallFlat(int iter = 1000)
         }
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->alltoall(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
@@ -555,11 +555,11 @@ void testAlltoallNonFlat(int iter = 1000)
         }
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->alltoall(allOutputTensors[i], allInputTensors[i]);
         works.push_back(std::move(work));
     }
@@ -598,11 +598,11 @@ void testBarrier(int iter = 1000)
 
     auto rank = pg->getRank();
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto i = 0; i < iter; ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->barrier();
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work = pg->barrier();
         works.push_back(std::move(work));
     }
 
@@ -637,11 +637,11 @@ void testBroadcast(int iter = 1000)
         }
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto& tensors : allTensors)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->broadcast(tensors);
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work = pg->broadcast(tensors);
         works.push_back(std::move(work));
     }
 
@@ -701,12 +701,12 @@ void testGather(int iter = 1000)
     c10d::GatherOptions gatherOptions;
     gatherOptions.rootRank = rootRank;
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
 
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->gather(allOutputTensors[i], allInputTensors[i], gatherOptions);
         works.push_back(std::move(work));
     }
@@ -756,11 +756,11 @@ void testReduce(int iter = 1000)
         allTensors[i] = std::vector<at::Tensor>({tensor});
     }
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (auto& tensors : allTensors)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work = pg->reduce(tensors);
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work = pg->reduce(tensors);
         works.push_back(std::move(work));
     }
 
@@ -828,11 +828,11 @@ void testScatter(int iter = 1000)
     c10d::ScatterOptions scatterOptions;
     scatterOptions.rootRank = rootRank;
 
-    std::vector<std::shared_ptr<::c10d::ProcessGroup::Work>> works;
+    std::vector<c10::intrusive_ptr<::c10d::ProcessGroup::Work>> works;
     for (size_t i = 0; i < allInputTensors.size(); ++i)
     {
         // Kick off work
-        std::shared_ptr<::c10d::ProcessGroup::Work> work =
+        c10::intrusive_ptr<::c10d::ProcessGroup::Work> work =
             pg->scatter(allOutputTensors[i], allInputTensors[i], scatterOptions);
         works.push_back(std::move(work));
     }

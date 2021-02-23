@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Intel Corporation
+ * Copyright (c) 2020-2021, Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,9 +31,6 @@
 
 #pragma once
 
-#ifndef PROCESS_GROUP_CCL_TEST
-#include <pybind11/chrono.h>
-#endif
 
 #include <exception>
 #include <memory>
@@ -44,14 +41,9 @@
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
-#include <ccl.hpp>
+#include <ccl_comm_collector.h>
 
-#ifndef PROCESS_GROUP_CCL_TEST
-#include <torch/extension.h>
-#endif
-
-namespace c10d
-{
+namespace c10d {
 
 // WorkCCL is the state associated with a CCL operarion.
 //
@@ -62,75 +54,28 @@ namespace c10d
 //
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
-//
-// Also note that ProcessGroupCCL only supports a single Tensor operation. In
-// other words, the size of the input Tensor vector should always be 1.
-//
-
 class ProcessGroupCCL : public ProcessGroup
 {
 
 public:
 
-  class WorkCCL : public ProcessGroup::Work
-  {
+  class AsyncWorkCCL : public ProcessGroup::Work {
+  public:
+    AsyncWorkCCL() : Work() {};
+
+    virtual void run() = 0;
+
   public:
 
-      WorkCCL() {}
-      WorkCCL(std::shared_ptr<ccl::request> req,
-              const std::vector<at::Tensor>& tensors,
-              std::string&& debugName) :
-          req(req),
-          tensors(tensors),
-          debugName(debugName)
-      {}
+    std::string debugName;
 
-      WorkCCL(std::shared_ptr<ccl::request> req,
-              std::vector<at::Tensor>&& tensors,
-              std::string&& debugName) :
-          req(req),
-          tensors(std::move(tensors)),
-          debugName(debugName)
-      {}
-
-      WorkCCL(const std::vector<at::Tensor>& tensors,
-              std::string&& debugName) :
-          tensors(tensors),
-          debugName(debugName)
-      {}
-
-      virtual ~WorkCCL();
-
-      bool isCompleted() override;
-      bool isSuccess() const override;
-      bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
-      void abort() override;
-
-      void setRequest(std::shared_ptr<ccl::request> r)
-      {
-          TORCH_CHECK(!req, "request is already set");
-          req = r;
-      }
-
-      std::vector<at::Tensor>& getTensors()
-      {
-          return tensors;
-      }
-
-  protected:
-      std::shared_ptr<ccl::request> req;
-
-      /*
-          keep copy of tensors to incrememt tensor reference counters
-          while CCL operation is in progress
-      */
-      std::vector<at::Tensor> tensors;
-      std::string debugName;
-
-      friend class ProcessGroupCCL;
+    friend class ProcessGroupCCL;
   };
 
-  explicit ProcessGroupCCL(int rank = -1, int size = -1, const std::vector<int> ranks = {});
+  explicit ProcessGroupCCL(const std::shared_ptr<Store>& store,
+                           int rank,
+                           int size,
+                           const std::chrono::milliseconds& op_time_out);
   virtual ~ProcessGroupCCL();
 
   std::shared_ptr<ProcessGroup::Work> broadcast(
@@ -214,25 +159,44 @@ public:
       const std::shared_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      const std::chrono::duration<float>& timeout = std::chrono::duration<float>(1));
-
-#ifndef PROCESS_GROUP_CCL_TEST
-  static void ProcessGroupCCLConstructor() __attribute__((constructor))
-  {
-      py::object register_backend =
-          py::module::import("torch.distributed").attr("Backend").attr("register_backend");
-      register_backend("ccl", py::cpp_function(createProcessGroupCCL));
-  }
-#endif
-
- protected:
+      const std::chrono::milliseconds& op_time_out =
+      std::chrono::milliseconds(OP_TIMEOUT_MILLIS));
+  static const int64_t OP_TIMEOUT_MILLIS;
+ public:
 
   static void cclInitOnce();
   static void cclFini();
 
-  ccl::coll_attr collAttrAg;
-  ccl::communicator_t comm;
-  ccl::comm_attr_t commAttr;
+  ccl::shared_ptr_class<ccl::kvs> get_kvs();
+
+  // Store that is used to exchange information between processes.
+  std::shared_ptr<Store> store_;
+  std::chrono::milliseconds op_timeout_millis;
+  // ccl kvs to identify the community.
+  ccl::shared_ptr_class<ccl::kvs> kvs;
+
+  // The CCL communicator that the process group has cached.
+  // The key is a list of devices that an operation is operating on
+  // The devices are stored in a device sequence and the cache CCL
+  // communicator is associated with this device sequence
+  //
+  // e.g. If the process group op only uses device 0, then the value of
+  // the used device string stored (value of the hashmap) would be "0".
+  //
+  //      If the process group op uses device 0 - 7 and the each tensor of the
+  //      input tensor list is on device, 0, 1, 2, 3, 4, 5, 6, 7 separately,
+  //      then the value of the used device string (key) stored would be
+  //      "0,1,2,3,4,5,6,7"
+  //
+  //      If the process group op uses device 0 - 7 and the each tensor of the
+  //      input tensor list is on device, 0, 4, 5, 6, 7, 1, 2, 3 separately,
+  //      then the value of the used device string stored would be
+  //      "0,4,5,6,7,1,2,3"
+  //
+  //      Note that the order of the device for the tensor list matters.
+  std::unordered_map<std::string, std::shared_ptr<torch_ccl::Comms>> ccl_comms;
+
+  static std::mutex globalMutex;
 };
 
 } // namespace c10d

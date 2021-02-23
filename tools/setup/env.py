@@ -1,7 +1,7 @@
 import os
+import shutil
 import platform
 
-from . import which
 
 IS_LINUX = (platform.system() == 'Linux')
 
@@ -10,11 +10,11 @@ BUILD_DIR = 'build'
 
 def get_compiler(runtime):
     if runtime == 'dpcpp':
-        cc = which('icx')
-        cpp = which('dpcpp')
+        cc = shutil.which('icx')
+        cpp = shutil.which('dpcpp')
     else:
-        cc = which('cc')
-        cpp = which('c++')
+        cc = shutil.which('cc')
+        cpp = shutil.which('c++')
     return cc, cpp
 
 

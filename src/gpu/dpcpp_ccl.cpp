@@ -129,6 +129,56 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   return *dpcpp_comms_ptr.get();
 }
 
+template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
+class XPUWorkCCL : public CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t> {
+public:
+  XPUWorkCCL(const std::vector<InputType>& inputs,
+             const std::vector<OutputType>& outputs,
+             const RunF f,
+             CommType& comms,
+             attr_t& attr,
+             std::chrono::milliseconds timeout,
+             int rank,
+             c10d::OpType opType,
+             const char* profilingTitle,
+             const c10::optional<std::vector<at::Tensor>>& inputTensors) :
+             CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
+                     inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
+
+  void run() override {
+    CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>::run();
+    // add SYCL running dependency communication -> computation.
+  };
+
+  // No explicitly synchronization.
+  virtual ~XPUWorkCCL() {
+    this->rets.clear();
+  }
+
+  // Waiting on the work's on XPU backend
+  bool wait(std::chrono::milliseconds timeout) override {
+    this->synchronizeInternal(timeout);
+    return true;
+  }
+
+private:
+
+};
+
+void execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work) {
+//  if(work->recordFunctionBeforeCallback_){
+//    work->recordFunctionBeforeCallback_();
+//  }
+  try {
+    work->run();
+  } catch (...) {
+    work->finishAsyncWorkCCLError(std::current_exception());
+    return;
+  }
+
+  work->finishAsyncWorkCCL();
+}
+
 } //namespace anonymous
 
 class XPUCCLStubs final: public DispatchStub {
@@ -141,35 +191,35 @@ public:
 
 protected:
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
 
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                          std::vector<at::Tensor>& inputTensors,
                                                          const GatherOptions& opts,
                                                          ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
                                                            std::vector<at::Tensor>& inputTensors,
                                                            const AllToAllOptions& opts,
                                                            ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
                                                                 at::Tensor& inputTensor,
                                                                 std::vector<int64_t>& outputSplitSizes,
                                                                 std::vector<int64_t>& inputSplitSizes,
@@ -191,7 +241,7 @@ struct RegisterXPUMethods {
 
 void checkGPUTensor(const at::Tensor& tensor)
 {
-
+//  TORCH_CHECK(!is_block_format(tensor), "ccl doesn't support block format tensor");
 }
 
 void checkGPUTensor(const std::vector<at::Tensor>& tensors)
@@ -199,17 +249,17 @@ void checkGPUTensor(const std::vector<at::Tensor>& tensors)
   checkGPUTensor(tensors[0]);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vector<at::Tensor>& tensors,
                                                                        const AllreduceOptions& opts,
                                                                        ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::allreduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
@@ -227,25 +277,28 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vect
                                              attr););
       });
       return ret_evt;
-  });
+  },
+  c10d::OpType::ALLREDUCE,
+  "torch_ccl::xpu_work::allreduce");
 
   work->debugName = std::string("xpu::allreduce");
+  execute(work);
 
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vector<at::Tensor>& tensors,
                                                                     const ReduceOptions& opts,
                                                                     ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
   const int root = opts.rootRank * tensors.size() + opts.rootTensor;
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::reduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
@@ -264,25 +317,28 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vector<
       });
       return ret_evt;
 
-  });
+  },
+    c10d::OpType::REDUCE,
+    "torch_ccl::xpu_work::reduce");
 
   work->debugName = std::string("xpu::reduce");
+  execute(work);
 
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vector<at::Tensor>& tensors,
                                                                        const BroadcastOptions &opts,
                                                                        ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
   const int root = opts.rootRank * tensors.size() + opts.rootTensor;
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::broadcast_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
@@ -299,26 +355,30 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vect
                                              attr));
       });
       return ret_evt;
-    });
+    },
+    c10d::OpType::BROADCAST,
+    "torch_ccl::xpu_work::broadcast");
+
 
   work->debugName = std::string("xpu::broadcast");
+  execute(work);
 
   return work;
 }
 
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                        std::vector<at::Tensor>& inputTensors,
                                                                        const AllgatherOptions& opts,
                                                                        ProcessGroupCCL& pg_ccl) {
   const int rank = pg_ccl.getRank();
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     inputTensors,
     outputTensors,
     [=](at::Tensor input,
-        std::vector<at::Tensor>& outputs,
+        const std::vector<at::Tensor>& outputs,
         ccl::allgatherv_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
@@ -349,20 +409,23 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::vect
       });
 
       return ret_evt;
-    });
+    },
+    c10d::OpType::ALLGATHER,
+    "torch_ccl::xpu_work::allgather");
 
   work->debugName = std::string("xpu::allgather");
+  execute(work);
 
   return work;
 }
 
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                     std::vector<at::Tensor>& inputTensors,
                                                                     const GatherOptions& opts,
                                                                     ProcessGroupCCL& pg) {
   checkSingleTensor(inputTensors);
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   auto grp_size = pg.getSize();
   auto rank = pg.getRank();
 
@@ -381,12 +444,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vector<
                 "gather: number of output tensors should equal "
                 "to the world size");
   }
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
           pg,
           inputTensors,
           outputTensors,
           [=](at::Tensor input,
-              std::vector<at::Tensor>& outputs,
+              const std::vector<at::Tensor>& outputs,
               ccl::alltoallv_attr attr,
               ccl::communicator& comm,
               ccl::stream& stream) {
@@ -445,14 +508,17 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vector<
               }
 
               return ret_evt;
-          });
+          },
+          c10d::OpType::GATHER,
+          "torch_ccl::xpu_work::gather");
 
   work->debugName = std::string("xpu::gather");
+  execute(work);
 
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::Tensor& outputTensor,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::Tensor& outputTensor,
                                                                            at::Tensor& inputTensor,
                                                                            std::vector<int64_t>& outputSplitSizes,
                                                                            std::vector<int64_t>& inputSplitSizes,
@@ -464,7 +530,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::T
   std::vector<at::Tensor> inputs{inputTensor};
   std::vector<at::Tensor> outputs{outputTensor};
   auto grp_size = pg.getSize();
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   if (outputSplitSizes.size() == 0 && inputSplitSizes.size() == 0){
     TORCH_CHECK(outputTensor.numel() == inputTensor.numel() &&
                 outputTensor.scalar_type() == inputTensor.scalar_type(),
@@ -472,7 +538,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::T
 
     TORCH_CHECK(outputTensor.size(0) % grp_size == 0,
                 "alltoall_base: tensor's dim 0 does not divide equally across group size");
-    work = collective<get_ccl_comms>(
+    work = collective<get_ccl_comms, XPUWorkCCL>(
             pg,
             inputs,
             outputs,
@@ -495,11 +561,13 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::T
                 });
 
                 return ret_evt;
-            });
+            },
+            c10d::OpType::ALLTOALL_BASE,
+            "torch_ccl::xpu_work::alltoall_base");
   }
   else{
     // Need alltoallv
-    work = collective<get_ccl_comms>(
+    work = collective<get_ccl_comms, XPUWorkCCL>(
             pg,
             inputs,
             outputs,
@@ -541,24 +609,27 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at::T
                     });
                 });
                 return ret_evt;
-            });
+            },
+            c10d::OpType::ALLTOALL_BASE,
+            "torch_ccl::xpu_work::alltoall_base");
   }
 
   work->debugName = std::string("xpu::alltoall_base");
+  execute(work);
 
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::vector<at::Tensor>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::vector<at::Tensor>& outputTensors,
                                                                       std::vector<at::Tensor>& inputTensors,
                                                                       const AllToAllOptions& opts,
                                                                       ProcessGroupCCL& pg){
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   auto grp_size = pg.getSize();
 
   std::vector<std::vector<at::Tensor>> outputTensors_list = {outputTensors};
   std::vector<std::vector<at::Tensor>> inputTensors_list = {inputTensors};
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
           pg,
           inputTensors_list,
           outputTensors_list,
@@ -621,9 +692,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::vecto
                 }
               }
               return ret_evt;
-          });
+          },
+          c10d::OpType::ALLTOALL,
+          "torch_ccl::xpu_work::alltoall");
 
   work->debugName = std::string("xpu::alltoall");
+  execute(work);
 
   return work;
 }

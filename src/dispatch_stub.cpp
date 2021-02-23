@@ -71,7 +71,7 @@ public:
 
 protected:
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
@@ -85,7 +85,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
@@ -99,7 +99,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
@@ -116,7 +116,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                          std::vector<at::Tensor>& inputTensors,
                                                          const GatherOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override {
@@ -133,7 +133,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> scatter_(std::vector<at::Tensor>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> scatter_(std::vector<at::Tensor>& outputTensors,
                                                           std::vector<std::vector<at::Tensor>>& inputTensors,
                                                           const ScatterOptions& opts,
                                                           ProcessGroupCCL& pg_ccl) override {
@@ -150,7 +150,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
@@ -164,7 +164,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
                                                                 at::Tensor& inputTensor,
                                                                 std::vector<int64_t>& outputSplitSizes,
                                                                 std::vector<int64_t>& inputSplitSizes,
@@ -185,7 +185,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
                                                            std::vector<at::Tensor>& inputTensors,
                                                            const AllToAllOptions& opts,
                                                            ProcessGroupCCL& pg_ccl) override {
@@ -202,7 +202,7 @@ protected:
     return work;
   }
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "torch_ccl::" << dev_type << "::barrier: ";
@@ -248,7 +248,7 @@ DispatchStub* DispatchStub::get_ccl_stub(c10::DeviceType dev_type) {
   return dispatch_stubs[stub_idx];
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce(std::vector<at::Tensor>& tensors,
                                                                        const AllreduceOptions& opts,
                                                                        ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
@@ -256,7 +256,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce(std::vect
   return get_ccl_stub(dev_type)->allreduce_(tensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vector<at::Tensor>& tensors,
                                                              const ReduceOptions& opts,
                                                              ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
@@ -264,7 +264,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vector<
   return get_ccl_stub(dev_type)->reduce_(tensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::broadcast(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::broadcast(std::vector<at::Tensor>& tensors,
                                                                 const BroadcastOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
@@ -272,7 +272,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::broadcast(std::vect
   return get_ccl_stub(dev_type)->broadcast_(tensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allgather(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allgather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                 std::vector<at::Tensor>& inputTensors,
                                                                 const AllgatherOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl) {
@@ -282,7 +282,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allgather(std::vect
   return get_ccl_stub(dev_type)->allgather_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::gather(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::gather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                              std::vector<at::Tensor>& inputTensors,
                                                              const GatherOptions& opts,
                                                              ProcessGroupCCL& pg_ccl) {
@@ -292,7 +292,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::gather(std::vector<
   return get_ccl_stub(dev_type)->gather_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::scatter(std::vector<at::Tensor>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::scatter(std::vector<at::Tensor>& outputTensors,
                                                               std::vector<std::vector<at::Tensor>>& inputTensors,
                                                               const ScatterOptions& opts,
                                                               ProcessGroupCCL& pg_ccl){
@@ -302,7 +302,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::scatter(std::vector
   return get_ccl_stub(dev_type)->scatter_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall_base(at::Tensor& outputTensor,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall_base(at::Tensor& outputTensor,
                                                                     at::Tensor& inputTensor,
                                                                     std::vector<int64_t>& outputSplitSizes,
                                                                     std::vector<int64_t>& inputSplitSizes,
@@ -313,7 +313,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall_base(at::T
   return get_ccl_stub(dev_type)->alltoall_base_(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall(std::vector<at::Tensor>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall(std::vector<at::Tensor>& outputTensors,
                                                                std::vector<at::Tensor>& inputTensors,
                                                                const AllToAllOptions& opts,
                                                                ProcessGroupCCL& pg_ccl) {
@@ -323,7 +323,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall(std::vecto
   return get_ccl_stub(dev_type)->alltoall_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::barrier(const BarrierOptions& opts,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::barrier(const BarrierOptions& opts,
                                                               ProcessGroupCCL& pg_ccl) {
   c10::DeviceType dev_type = c10::DeviceType::CPU;
   return get_ccl_stub(dev_type)->barrier_(opts, pg_ccl);

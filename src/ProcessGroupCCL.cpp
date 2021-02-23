@@ -59,6 +59,73 @@ void checkRank(int rank, int size)
 
 } // namespace
 
+
+c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
+        const std::vector<std::vector<at::Tensor>>& outputTensors) {
+  if (outputTensors.size() > 1) {
+    return c10::make_intrusive<c10::ivalue::Future>(
+            c10::ListType::create(c10::ListType::create(c10::TensorType::get())));
+  }
+  return c10::make_intrusive<c10::ivalue::Future>(
+          c10::ListType::create(c10::TensorType::get()));
+}
+
+void returnFutureWithOutput(
+        c10::intrusive_ptr<c10::ivalue::Future>& future,
+        const std::vector<std::vector<at::Tensor>>& outputTensors) {
+  if (outputTensors.size() == 0) {
+    future->markCompleted(c10::IValue(std::vector<at::Tensor>()));
+    return;
+  }
+  if (outputTensors.size() > 1) {
+    future->markCompleted(c10::IValue(outputTensors));
+    return;
+  }
+  future->markCompleted(c10::IValue(outputTensors[0]));
+}
+
+ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
+                                            int rank,
+                                            c10d::OpType opType,
+                                            const char* profilingTitle,
+                                            const c10::optional<std::vector<at::Tensor>>& inputTensors)
+// Profiler: Pass nullptr as profilingTitle to parent constructor to
+// replace default profiler implementation with async version that reports
+// correct timestamps for work that is asynchronously executed.
+        : ProcessGroup::Work(rank, opType, profilingTitle, inputTensors),
+          outputTensors_(std::move(outputTensors)),
+          future_(createFutureAsOutput(outputTensors)) {
+//  if (profilingTitle != nullptr) {
+//    recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
+//  }
+}
+
+c10::intrusive_ptr<c10::ivalue::Future> ProcessGroupCCL::AsyncWorkCCL::getFuture() {
+  return future_;
+}
+
+std::vector<at::Tensor> ProcessGroupCCL::AsyncWorkCCL::result() {
+  TORCH_CHECK(
+          isCompleted(),
+          "Work needs to be completed before calling result(). "
+          "Should call wait() before result().");
+  TORCH_CHECK(
+          outputTensors_.size() <= 1,
+          "work result does not support list of lists, use .getFuture() and value()");
+  return outputTensors_.size() == 0 ? std::vector<at::Tensor>()
+                                    : outputTensors_.at(0);
+}
+
+void ProcessGroupCCL::AsyncWorkCCL::finishAsyncWorkCCLError(std::exception_ptr eptr) {
+  future_->setError(eptr);
+  finish(eptr);
+}
+
+void ProcessGroupCCL::AsyncWorkCCL::finishAsyncWorkCCL() {
+  returnFutureWithOutput(future_, outputTensors_);
+  finish();
+}
+
 const int64_t ProcessGroupCCL::OP_TIMEOUT_MILLIS = 10 * 1000;
 std::mutex ProcessGroupCCL::globalMutex;
 
@@ -78,17 +145,17 @@ void ProcessGroupCCL::cclInitOnce()
   });
 }
 
-std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
-    const std::shared_ptr<Store>& store,
+c10::intrusive_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
+    const c10::intrusive_ptr<Store>& store,
     int rank,
     int size,
-    const std::chrono::milliseconds& op_time_out)
+    std::chrono::milliseconds op_time_out)
 {
-  return std::make_shared<ProcessGroupCCL>(store, rank, size, op_time_out);
+  return c10::make_intrusive<ProcessGroupCCL>(store, rank, size, op_time_out);
 }
 
-ProcessGroupCCL::ProcessGroupCCL(const std::shared_ptr<Store>& store, int rank, int size, const std::chrono::milliseconds& op_time_out)
-    : ProcessGroup(rank, size), store_(store), op_timeout_millis(op_time_out),
+ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int rank, int size, std::chrono::milliseconds op_time_out)
+    : ProcessGroup(rank, size), store_(store), timeout(op_time_out),
       ccl_member_(std::make_unique<torch_ccl::CCLCommCollector>())
 {
 #ifdef NDEBUG
@@ -110,7 +177,7 @@ ProcessGroupCCL::~ProcessGroupCCL()
 {
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     std::vector<at::Tensor>& tensors,
     const BroadcastOptions& opts)
 {
@@ -121,11 +188,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::broadcast(tensors, opts, *this);
 
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
   std::vector<at::Tensor>& tensors,
   const AllreduceOptions& opts)
 {
@@ -134,18 +200,17 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
   RECORD_FUNCTION("torch_ccl::allreduce", tensor_param);
 
   auto work = DispatchStub::allreduce(tensors, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce_coalesced(
     std::vector<at::Tensor>& /* unused */,
     const AllreduceCoalescedOptions& /* unused */)
 {
   TORCH_CHECK(false, "ProcessGroupCCL does not support allreduce_coalesced");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
     std::vector<at::Tensor>& tensors,
     const ReduceOptions& opts)
 {
@@ -155,12 +220,11 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::reduce(tensors, opts, *this);
-  work->run();
   return work;
 }
 
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::vector<std::vector<at::Tensor>>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
     const AllgatherOptions& opts)
@@ -171,19 +235,18 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
   RECORD_FUNCTION("torch_ccl::allgather", tensor_param);
 
   auto work = DispatchStub::allgather(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::_allgather_base(
       at::Tensor& outputBuffer,
       at::Tensor& inputBuffer,
       const AllgatherOptions& /* unused */)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support allgather_base");
+  TORCH_CHECK(false, "ProcessGroupCCL does not support _allgather_base");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
     std::vector<std::vector<at::Tensor>>& /* unused */,
     std::vector<at::Tensor>& /* unused */,
     const AllgatherOptions& /* unused */)
@@ -191,7 +254,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(
   TORCH_CHECK(false, "ProcessGroupCCL does not support allgather_coalesced");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     std::vector<std::vector<at::Tensor>>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
     const GatherOptions& opts)
@@ -202,11 +265,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
   RECORD_FUNCTION("torch_ccl::gather", tensor_param);
 
   auto work = DispatchStub::gather(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     std::vector<at::Tensor>& outputTensors,
     std::vector<std::vector<at::Tensor>>& inputTensors,
     const ScatterOptions& opts)
@@ -217,11 +279,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
   RECORD_FUNCTION("torch_ccl::scatter", tensor_param);
 
   auto work = DispatchStub::scatter(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
     std::vector<at::Tensor>& /* unused */,
     std::vector<std::vector<at::Tensor>>& /* unused */,
     const ReduceScatterOptions& /* unused */)
@@ -229,7 +290,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce_scatter(
   TORCH_CHECK(false, "ProcessGroupCCL does not support reduce_scatter");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
     at::Tensor& outputTensor,
     at::Tensor& inputTensor,
     std::vector<int64_t>& outputSplitSizes,
@@ -242,11 +303,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
   RECORD_FUNCTION("torch_ccl::alltoall_base", tensor_param);
 
   auto work = DispatchStub::alltoall_base(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<at::Tensor>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
     const AllToAllOptions& opts)
@@ -257,11 +317,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
   RECORD_FUNCTION("torch_ccl::alltoall", tensor_param);
 
   auto work = DispatchStub::alltoall(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::send(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */,
     int /* unused */)
@@ -269,7 +328,7 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::send(
   TORCH_CHECK(false, "ProcessGroupCCL does not support send");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */,
     int /* unused */)
@@ -277,14 +336,14 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recv(
   TORCH_CHECK(false, "ProcessGroupCCL does not support recv");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::recvAnysource(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::recvAnysource(
     std::vector<at::Tensor>& /* unused */,
     int /* unused */)
 {
   TORCH_CHECK(false, "ProcessGroupCCL does not support recvAnysource");
 }
 
-std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::barrier(
     const BarrierOptions& opts)
 {
  return DispatchStub::barrier(opts, *this);

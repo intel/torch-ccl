@@ -169,7 +169,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_broadcast_stress(self):
         inputs = [torch.tensor([i * self.world_size + self.rank]) for i in range(1000)]
         self._test_broadcast_stress(inputs)
-    
+
     def _test_allreduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -182,7 +182,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             tensor = fn(input)
             work = pg.allreduce([tensor], opts)
             work.wait()
-            
+
             # TODO(#38095): Replace assertEqualIgnoreType. See issue #38095
             self.assertEqualIgnoreType(output, tensor)
 
@@ -200,7 +200,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def _test_reduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
-        
+
         for (op, input, output) in simple_reduce_tests(self.rank, self.world_size):
 
             for root in range(self.world_size):
@@ -275,12 +275,12 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             output = [
                 [
                     fn(torch.tensor([-1])) for _ in range(self.world_size)
-                ] 
+                ]
             ]
             expected_output = [
                 [
                     torch.tensor([i*n]) for i in range(self.world_size)
-                ] 
+                ]
             ]
             work = pg.allgather(output, input)
             work.wait()
@@ -313,7 +313,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work = pg.alltoall_base(out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-   
+
     def _test_alltoall_base_unequal_split_helper(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -330,7 +330,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
              out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-        
+
     def test_allotall_equal_split_basics(self):
         self._test_alltoall_base_equal_split_helper(lambda t: t.clone())
 
@@ -375,7 +375,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work.wait()
         for t1, t2 in zip(out_tensors, expected_tensors):
             self.assertEqual(t1.cpu(), t2.cpu())
-        
+
     def test_alltoall_basics(self):
         self._test_all_to_all_helper(lambda t: t.clone())
 

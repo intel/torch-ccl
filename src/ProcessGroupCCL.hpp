@@ -75,122 +75,120 @@ class ProcessGroupCCL : public ProcessGroup
 public:
   class AsyncWorkCCL : public ProcessGroup::Work {
   public:
-    AsyncWorkCCL() : Work() {};
+    AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
+                 int rank = -1,
+                 c10d::OpType opType = OpType::UNKNOWN,
+                 const char* profilingTitle = nullptr,
+                 const c10::optional<std::vector<at::Tensor>>& inputTensors = c10::nullopt);
 
     virtual void run() = 0;
 
-    std::exception_ptr exception() const override {
-      return exception_;
-    }
+    c10::intrusive_ptr<c10::ivalue::Future> getFuture() override;
 
-    int sourceRank() const override {
-      throw std::runtime_error(
-              "sourceRank() may only be called on work objects "
-              "that correspond to a recv or recv-from-any call.");
-    }
+    std::vector<at::Tensor> result() override;
 
-    c10::intrusive_ptr<c10::ivalue::Future> getFuture() override {
-      TORCH_CHECK(false, "ProcessGroupCCL::AsyncWorkCCL::getFuture not implemented.")
-    }
+    void finishAsyncWorkCCL();
 
-    void synchronize() override {}
+    void finishAsyncWorkCCLError(std::exception_ptr eptr);
+
+  protected:
+    friend class ProcessGroupCCL;
 
   public:
-
     std::string debugName;
-
-    friend class ProcessGroupCCL;
+    const std::vector<std::vector<at::Tensor>> outputTensors_;
+    // The future returned by getFuture.
+    c10::intrusive_ptr<at::ivalue::Future> future_;
   };
 
-  explicit ProcessGroupCCL(const std::shared_ptr<Store>& store,
+  explicit ProcessGroupCCL(const c10::intrusive_ptr<Store>& store,
                            int rank,
                            int size,
-                           const std::chrono::milliseconds& op_time_out);
+                           std::chrono::milliseconds);
   virtual ~ProcessGroupCCL();
 
-  std::shared_ptr<ProcessGroup::Work> broadcast(
+  c10::intrusive_ptr<ProcessGroup::Work> broadcast(
       std::vector<at::Tensor>& data,
       const BroadcastOptions& opts = BroadcastOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> allreduce(
+  c10::intrusive_ptr<ProcessGroup::Work> allreduce(
       std::vector<at::Tensor>& tensors,
       const AllreduceOptions& opts = AllreduceOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> allreduce_coalesced(
+  c10::intrusive_ptr<ProcessGroup::Work> allreduce_coalesced(
       std::vector<at::Tensor>& tensors,
       const AllreduceCoalescedOptions& opts =
           AllreduceCoalescedOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> reduce(
+  c10::intrusive_ptr<ProcessGroup::Work> reduce(
       std::vector<at::Tensor>& tensors,
       const ReduceOptions& opts = ReduceOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> allgather(
+  c10::intrusive_ptr<ProcessGroup::Work> allgather(
       std::vector<std::vector<at::Tensor>>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> allgather_base(
+  c10::intrusive_ptr<ProcessGroup::Work> _allgather_base(
       at::Tensor& outputBuffer,
       at::Tensor& inputBuffer,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> allgather_coalesced(
+  c10::intrusive_ptr<ProcessGroup::Work> allgather_coalesced(
       std::vector<std::vector<at::Tensor>>& outputTensorLists,
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> gather(
+  c10::intrusive_ptr<ProcessGroup::Work> gather(
       std::vector<std::vector<at::Tensor>>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
       const GatherOptions& opts = GatherOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> scatter(
+  c10::intrusive_ptr<ProcessGroup::Work> scatter(
       std::vector<at::Tensor>& outputTensors,
       std::vector<std::vector<at::Tensor>>& inputTensors,
       const ScatterOptions& opts = ScatterOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> reduce_scatter(
+  c10::intrusive_ptr<ProcessGroup::Work> reduce_scatter(
       std::vector<at::Tensor>& outputTensors,
       std::vector<std::vector<at::Tensor>>& inputTensors,
       const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> alltoall_base(
+  c10::intrusive_ptr<ProcessGroup::Work> alltoall_base(
       at::Tensor& outputTensor,
       at::Tensor& inputTensor,
       std::vector<int64_t>& outputSplitSizes,
       std::vector<int64_t>& inputSplitSizes,
       const AllToAllOptions& opts = AllToAllOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> alltoall(
+  c10::intrusive_ptr<ProcessGroup::Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
       const AllToAllOptions& opts = AllToAllOptions()) override;
 
-  std::shared_ptr<ProcessGroup::Work> send(
+  c10::intrusive_ptr<ProcessGroup::Work> send(
       std::vector<at::Tensor>& tensors,
       int dstRank,
       int tag) override;
 
-  std::shared_ptr<ProcessGroup::Work> recv(
+  c10::intrusive_ptr<ProcessGroup::Work> recv(
       std::vector<at::Tensor>& tensors,
       int srcRank,
       int tag) override;
 
-  std::shared_ptr<ProcessGroup::Work> recvAnysource(
+  c10::intrusive_ptr<ProcessGroup::Work> recvAnysource(
       std::vector<at::Tensor>& tensor,
       int tag) override;
 
-  std::shared_ptr<ProcessGroup::Work> barrier(
+  c10::intrusive_ptr<ProcessGroup::Work> barrier(
       const BarrierOptions& opts = BarrierOptions()) override;
 
   // create a new ProcessGroupCCL and initialize CCL if not initialized
-  static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
-      const std::shared_ptr<Store>& store,
+  static c10::intrusive_ptr<ProcessGroup> createProcessGroupCCL(
+      const c10::intrusive_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      const std::chrono::milliseconds& op_time_out =
-      std::chrono::milliseconds(OP_TIMEOUT_MILLIS));
+      std::chrono::milliseconds op_time_out = kNoTimeout);
   static const int64_t OP_TIMEOUT_MILLIS;
  public:
 
@@ -198,8 +196,9 @@ public:
   static void cclFini();
 
   // Store that is used to exchange information between processes.
-  std::shared_ptr<Store> store_;
-  std::chrono::milliseconds op_timeout_millis;
+  c10::intrusive_ptr<Store> store_;
+
+  std::chrono::milliseconds timeout;
 
   std::unique_ptr<torch_ccl::CCLCommCollector> ccl_member_;
 

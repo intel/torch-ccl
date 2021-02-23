@@ -8,7 +8,6 @@ import os
 import sys
 import pathlib
 import shutil
-import multiprocessing
 from subprocess import check_call, check_output
 
 import torch
@@ -22,6 +21,8 @@ from tools.setup.env import get_compiler
 CWD = os.path.dirname(os.path.abspath(__file__))
 TORCH_CCL_PATH = os.path.join(CWD, "torch_ccl")
 
+def _check_env_flag(name, default=''):
+  return os.getenv(name, default).upper() in ['ON', '1', 'YES', 'TRUE', 'Y']
 
 def check_file(f):
     if not os.path.exists(f):
@@ -34,7 +35,7 @@ def check_file(f):
 def create_version():
     """Create the version string for torch-ccl"""
     cwd = os.path.dirname(os.path.abspath(__file__))
-    package_name = os.getenv('CCL_PACKAGE_NAME', 'torch-ccl')
+    package_name = os.getenv('CCL_PACKAGE_NAME', 'oneccl-bind-pt')
     version = open('version.txt', 'r').read().strip()
     sha = 'Unknown'
 
@@ -43,14 +44,9 @@ def create_version():
     except Exception:
         pass
 
-    if os.getenv('PYTORCH_BUILD_VERSION'):
-        assert os.getenv('PYTORCH_BUILD_NUMBER') is not None
-        build_number = int(os.getenv('PYTORCH_BUILD_NUMBER'))
-        version = os.getenv('PYTORCH_BUILD_VERSION')
-        if build_number > 1:
-            version += '.post' + str(build_number)
-    elif sha != 'Unknown':
-        version += '+' + sha[:7]
+    if os.getenv('CCL_SHA_VERSION', False):
+        if sha != 'Unknown':
+            version += '+' + sha[:7]
 
     print("Building {}-{}".format(package_name, version))
 
@@ -59,14 +55,13 @@ def create_version():
         f.write("__version__ = '{}'\n".format(version))
         f.write("git_version = {}\n".format(repr(sha)))
 
-    return version
+    return version, package_name
 
 
 class BuildCMakeExt(BuildExtension):
     """
     Builds using cmake instead of the python setuptools implicit build
     """
-
     def run(self):
         """
         Perform build_cmake before doing the 'normal' stuff
@@ -75,20 +70,10 @@ class BuildCMakeExt(BuildExtension):
         for ext in cmake_extensions:
             try:
                 # temp patch the oneCCL code
-                check_call(["git", "apply", os.path.join(CWD, "patches/Update_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/oneCCL"))
-            except Exception as e:
-                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-                print(e)
-                print("=" * 64)
+                check_call(["git", "apply", "./patches/Update_Internal_oneCCL.patch"], cwd=CWD)
+            except:
+                # ignore patch fail
                 pass
-            try:
-                check_call(["git", "apply", "./patches/unlink_torchlib.patch"], cwd=CWD)
-            except Exception as e:
-                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-                print(e)
-                print("=" * 64)
-                pass
-
             self.build_cmake(ext)
 
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
@@ -108,8 +93,13 @@ class BuildCMakeExt(BuildExtension):
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
+        build_type = 'Release'
+
+        if _check_env_flag('DEBUG'):
+            build_type = 'Debug'
 
         build_options = {
+            'CMAKE_BUILD_TYPE' : build_type,
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
             'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
@@ -134,7 +124,7 @@ class BuildCMakeExt(BuildExtension):
 
         extension.generate(build_options, my_env, build_dir, install_dir)
 
-        build_args = ['-j', str(multiprocessing.cpu_count())]
+        build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
@@ -219,12 +209,12 @@ def get_python_c_module():
 
 
 if __name__ == '__main__':
-    version = create_version()
+    version, package_name = create_version()
     c_module = get_python_c_module()
     cmake_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "CMakeLists.txt")
     modules = [CMakeExtension("libtorch_ccl", cmake_file), c_module]
     setup(
-        name='torch_ccl',
+        name=package_name,
         version=version,
         ext_modules=modules,
         packages=['torch_ccl'],

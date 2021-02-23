@@ -53,10 +53,10 @@
     at::ScalarType _st = ::detail::scalar_type(the_type);                    \
     switch (_st) {                                                           \
       /*AT_PRIVATE_CASE_TYPE(at::ScalarType::Char, char, __VA_ARGS__)  */    \
-      AT_PRIVATE_CASE_TYPE(at::ScalarType::Int, int, __VA_ARGS__)        \
-      AT_PRIVATE_CASE_TYPE(at::ScalarType::Long, int64_t, __VA_ARGS__)       \
-      AT_PRIVATE_CASE_TYPE(at::ScalarType::Float, float, __VA_ARGS__)        \
-      AT_PRIVATE_CASE_TYPE(at::ScalarType::Double, double, __VA_ARGS__)      \
+      AT_PRIVATE_CASE_TYPE(NAME, at::ScalarType::Int, int, __VA_ARGS__)      \
+      AT_PRIVATE_CASE_TYPE(NAME, at::ScalarType::Long, int64_t, __VA_ARGS__) \
+      AT_PRIVATE_CASE_TYPE(NAME, at::ScalarType::Float, float, __VA_ARGS__)  \
+      AT_PRIVATE_CASE_TYPE(NAME, at::ScalarType::Double, double, __VA_ARGS__) \
       default:                                                               \
         AT_ERROR(#NAME, " not implemented for '", toString(_st), "'");       \
     }                                                                        \
@@ -274,19 +274,19 @@ private:
 };
 
 template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> make_work_ccl(const std::vector<InputType>& inputs,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> make_work_ccl(const std::vector<InputType>& inputs,
                                                              const std::vector<OutputType>& outputs,
                                                              RunF f,
                                                              CommType& comms,
                                                              attr_t& attr) {
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> ret_ptr;
-  ret_ptr.reset(new AsyncWorkCCLWrap<RunF, CommType, InputType, OutputType, attr_t>(inputs, outputs, f, comms, attr));
+  c10::intrusive_ptr<AsyncWorkCCLWrap<RunF, CommType, InputType, OutputType, attr_t>> ret_ptr =
+          c10::make_intrusive<AsyncWorkCCLWrap<RunF, CommType, InputType, OutputType, attr_t>>(inputs, outputs, f, comms, attr);
   return ret_ptr;
 }
 
 template <Comms& (*get_ccl_fn)(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices),
           typename fn, typename pre_process, typename post_process, typename input_t, typename output_t>
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   ProcessGroupCCL& pg_ccl,
   std::vector<input_t>& inputs,
   std::vector<output_t>& outputs,
@@ -301,15 +301,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   const auto key = get_key_from_devs(devices);
   auto& comms = get_ccl_fn(pg_ccl, key, devices);
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = make_work_ccl(inputs, outputs, fun, comms, attr);
-
-  return work;
+  return make_work_ccl(inputs, outputs, fun, comms, attr);
 }
 
 template <Comms& (*get_ccl_fn)(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices),
           typename fn, typename input_t, typename output_t>
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   ProcessGroupCCL& pg_ccl,
   std::vector<input_t>& inputs,
   std::vector<output_t>& outputs,

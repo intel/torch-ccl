@@ -229,42 +229,42 @@ public:
 
 protected:
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_(std::vector<at::Tensor>& tensors,
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const GatherOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
                                                                at::Tensor& inputTensor,
                                                                std::vector<int64_t>& outputSplitSizes,
                                                                std::vector<int64_t>& inputSplitSizes,
                                                                const AllToAllOptions& opts,
                                                                ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
                                                              std::vector<at::Tensor>& inputTensors,
                                                              const AllToAllOptions& opts,
                                                              ProcessGroupCCL& pg) override;
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
 
   void reset() override {}
@@ -339,13 +339,13 @@ void sparseAllreduceCompletionFn(
   return ;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::vector<at::Tensor>& tensors,
                                                                       const AllreduceOptions& opts,
                                                                       ProcessGroupCCL& pg) {
   checkSingleTensor(tensors);
   const auto& layout = tensors[0].layout();
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   if (layout == c10::kStrided) {
     work = collective<get_ccl_comms>(
       pg,
@@ -437,12 +437,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::vecto
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vector<at::Tensor>& tensors,
                                                                    const ReduceOptions& opts,
                                                                    ProcessGroupCCL& pg) {
   checkSingleTensor(tensors);
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = collective<get_ccl_comms>(
     pg,
     tensors,
@@ -468,12 +468,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vector<a
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::vector<at::Tensor>& tensors,
                                                                       const BroadcastOptions &opts,
                                                                       ProcessGroupCCL& pg) {
   checkSingleTensor(tensors);
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = collective<get_ccl_comms>(
     pg,
     tensors,
@@ -498,7 +498,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::vecto
 }
 
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                       std::vector<at::Tensor>& inputTensors,
                                                                       const AllgatherOptions& opts,
                                                                       ProcessGroupCCL& pg) {
@@ -508,7 +508,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::vecto
 
   checkSameType(inputTensors[0], outputTensors[0]);
 
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = collective<get_ccl_comms>(
     pg,
     inputTensors,
@@ -558,12 +558,12 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::vecto
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                       std::vector<at::Tensor>& inputTensors,
                                                                       const GatherOptions& opts,
                                                                       ProcessGroupCCL& pg) {
   checkSingleTensor(inputTensors);
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   auto grp_size = pg.getSize();
   auto rank = pg.getRank();
 
@@ -650,7 +650,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vector<s
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at::Tensor& outputTensor,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at::Tensor& outputTensor,
                                                              at::Tensor& inputTensor,
                                                              std::vector<int64_t>& outputSplitSizes,
                                                              std::vector<int64_t>& inputSplitSizes,
@@ -662,7 +662,7 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at::Te
   std::vector<at::Tensor> inputs{inputTensor};
   std::vector<at::Tensor> outputs{outputTensor};
   auto grp_size = pg.getSize();
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   if (outputSplitSizes.size() == 0 && inputSplitSizes.size() == 0){
     TORCH_CHECK(outputTensor.numel() == inputTensor.numel() &&
         outputTensor.scalar_type() == inputTensor.scalar_type(),
@@ -743,11 +743,11 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at::Te
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_(std::vector<at::Tensor>& outputTensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_(std::vector<at::Tensor>& outputTensors,
                                                              std::vector<at::Tensor>& inputTensors,
                                                              const AllToAllOptions& opts,
                                                              ProcessGroupCCL& pg){
-  std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   auto grp_size = pg.getSize();
 
   TORCH_CHECK(inputTensors.size() == (size_t)grp_size,
@@ -831,10 +831,10 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_(std::vector
   return work;
 }
 
-std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::barrier_(const BarrierOptions& opts,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::barrier_(const BarrierOptions& opts,
                                                                    ProcessGroupCCL& pg) {
-  
-  std::shared_ptr<AsyncBarrierWork> work = std::make_shared<AsyncBarrierWork>();
+
+  c10::intrusive_ptr<AsyncBarrierWork> work = c10::make_intrusive<AsyncBarrierWork>();
   auto& comms_map = pg.ccl_comms;
   for(auto iter = comms_map.begin(); iter != comms_map.end(); iter++){
       for(size_t i =0 ; i < iter->second->comms.size(); i++){

@@ -32,7 +32,7 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
-
+#include <pybind11/stl.h>
 #define TORCH_CCL_CPP_API __attribute__ ((visibility ("default")))
 
 void torch_ccl_python_init(pybind11::module &m);

@@ -11,7 +11,7 @@ from functools import reduce
 import operator
 
 cpu_device = torch.device("cpu")
-dtype = torch.float32
+dtype = torch.bfloat16
 def simple_reduce_tests(rank, world_size):
     tests = [
         (

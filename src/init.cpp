@@ -64,6 +64,7 @@ TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
                                            py::arg("store"),
                                            py::arg("rank"),
                                            py::arg("size"),
+                                           py::arg("ranks")={},
                                            py::arg("timeout") = std::chrono::milliseconds(
                                                    ::c10d::ProcessGroupCCL::OP_TIMEOUT_MILLIS)));
 
@@ -75,12 +76,14 @@ TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
     py::init([](const std::shared_ptr<::c10d::Store>& store,
                 int rank,
                 int size,
+                const std::vector<int> ranks,
                 std::chrono::milliseconds timeout) {
       return std::make_shared<::c10d::ProcessGroupCCL>(store, rank, size, timeout);
     }),
     py::arg("store"),
     py::arg("rank"),
     py::arg("size"),
+    py::arg("ranks") = {},
     py::arg("timeout") = std::chrono::milliseconds(10 * 1000));
 
 }

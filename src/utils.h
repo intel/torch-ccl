@@ -33,9 +33,8 @@
 
 #include "ProcessGroupCCL.hpp"
 #include <ATen/detail/FunctionTraits.h>
-#include <ATen/record_function.h>
 #include <c10d/Types.hpp>
-
+#include <torch/csrc/autograd/record_function.h>
 #define CCL_CHECK(cmd)                                               \
   do {                                                               \
     try {                                                            \
@@ -120,7 +119,7 @@ public:
     throw std::runtime_error("invalid call to ::isSuccess.");
   }
 
-  bool wait(std::chrono::milliseconds timeout) override
+  bool wait() override
   {
     for(auto& event : events) {
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
@@ -198,7 +197,7 @@ public:
     throw std::runtime_error("invalid call to ::isSuccess.");
   }
 
-  bool wait(std::chrono::milliseconds timeout) override
+  bool wait() override
   {
     RECORD_FUNCTION(std::string("torch_ccl::wait::") + debugName, std::vector<c10::IValue>());
     for(auto& ret : rets) {
@@ -217,7 +216,7 @@ public:
     TORCH_CHECK(false, "ProcessGroupCCL::WorkCCL::abort not implemented");
   }
 
-  std::vector<at::Tensor> result() override
+  std::vector<at::Tensor> result() 
   {
     return result_wrap_<OutputType>();
   }

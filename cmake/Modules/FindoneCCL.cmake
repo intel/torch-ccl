@@ -25,11 +25,11 @@ GET_TARGET_PROPERTY(INCLUDE_DIRS ccl INCLUDE_DIRECTORIES)
 SET(ONECCL_INCLUDE_DIR ${INCLUDE_DIRS})
 
 add_library(mpi SHARED IMPORTED)
-set_target_properties(mpi PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/mpi/lib/libmpi.so)
+set_target_properties(mpi PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/deps/mpi/lib/libmpi.so)
 
 
 add_library(fabric SHARED IMPORTED)
-set_target_properties(fabric PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/ofi/lib/libfabric.so)
+set_target_properties(fabric PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/deps/ofi/lib/libfabric.so)
 
 SET(ONECCL_LIBRARIES ccl fabric mpi)
 

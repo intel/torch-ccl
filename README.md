@@ -21,26 +21,39 @@ We recommend Anaconda as Python package management system. The following is the 
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0) |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)   | 
    | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3) |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)   |
 
-The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.7 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable ``alltoall`` collective communication primitive. The patch file about these two PRs is in ``patches`` directory and you can use it directly. 
+The usage details can be found in the README of corresponding branch. The following part is about the usage for mlperf_2021_may_torch_ccl.
 
 # Requirements
 
 Python 3.6 or later and a C++14 compiler
 
-pytorch-v1.7.1.
+pytorch-v1.5.0-rc3
 
 # Installation
 
 To install `torch-ccl`:
 
-1. clone the `torch-ccl`.
+1. Install PyTorch
+```bash
+   # clone PyTorch
+   git clone https://github.com/pytorch/pytorch.git
+   cd pytorch && git checkout tags/v1.5.0-rc3 -b v1.5-rc3
+   git submodule sync && git submodule update --init --recursive
+
+   wget https://raw.githubusercontent.com/intel/intel-extension-for-pytorch/v0.2/torch_patches/0001-enable-Intel-Extension-for-CPU-enable-CCL-backend.patch
+   patch -p1 < 0001-enable-Intel-Extension-for-CPU-enable-CCL-backend.patch
+   python setup.py install
+``` 
+2. clone the `torch-ccl`.
 
 ```bash
    git clone https://github.com/intel/torch-ccl.git && cd torch-ccl 
    git submodule sync 
    git submodule update --init --recursive
+   cd third_party/oneCCL && git apply ../../patches/Fix_the_*
+   cd ../../
 ```
-2. Install torch-ccl
+3. Install torch-ccl
 
 ```bash
    python setup.py install
@@ -65,7 +78,7 @@ os.environ['RANK'] = os.environ.get('PMI_RANK', -1)
 os.environ['WORLD_SIZE'] = os.environ.get('PMI_SIZE', -1)
 
 backend = 'ccl'
-dist.init_process_group(backend, ...)
+dist.init_process_group(backend)
 my_rank = dist.get_rank()
 my_size = dist.get_world_size()
 print("my rank = %d  my size = %d" % (my_rank, my_size))

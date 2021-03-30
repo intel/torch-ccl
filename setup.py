@@ -94,10 +94,9 @@ class BuildCMakeExt(build_ext):
 
         extension.generate(build_options, my_env, build_dir, install_dir)
 
-        max_jobs = os.getenv('MAX_JOBS', str(multiprocessing.cpu_count()))
-        build_args = ['-j', max_jobs]
-        check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir), env=my_env)
-        check_call(['make', 'install'], cwd=str(build_dir), env=my_env)
+        build_args = ['-j', str(multiprocessing.cpu_count())]
+        check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
+        check_call(['make', 'install'], cwd=str(build_dir))
 
 
 class Clean(clean):

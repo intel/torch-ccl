@@ -159,6 +159,7 @@ public:
       const std::shared_ptr<Store>& store,
       int rank = -1,
       int size = -1,
+      const std::vector<int> ranks = {},
       const std::chrono::milliseconds& op_time_out =
       std::chrono::milliseconds(OP_TIMEOUT_MILLIS));
   static const int64_t OP_TIMEOUT_MILLIS;

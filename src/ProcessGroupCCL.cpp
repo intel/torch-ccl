@@ -34,7 +34,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
-#include <ATen/record_function.h>
+#include <torch/csrc/autograd/record_function.h>
 #include "utils.h"
 
 
@@ -80,6 +80,7 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const std::shared_ptr<Store>& store,
     int rank,
     int size,
+    const std::vector<int> ranks,
     const std::chrono::milliseconds& op_time_out)
 {
   return std::make_shared<ProcessGroupCCL>(store, rank, size, op_time_out);

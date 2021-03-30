@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 36354ce..2773bfa 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -238,14 +238,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+ 
+ set(PROJECT_VERSION "${CCL_MAJOR_VERSION}.${CCL_MINOR_VERSION}.${CCL_UPDATE_VERSION}")
+ 
+-if (BUILD_CONFIG)
+-    configure_file("cmake/templates/oneCCLConfig.cmake.in"
+-                   "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfig.cmake"
+-                   COPYONLY)
+-    configure_file("cmake/templates/oneCCLConfigVersion.cmake.in"
+-                   "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfigVersion.cmake"
+-                   @ONLY)
+-endif()
+ 
+ #include other CMakeLists
+ 
+diff --git a/examples/external_launcher/CMakeLists.txt b/examples/external_launcher/CMakeLists.txt
+index 6a90785..bf3b001 100644
+--- a/examples/external_launcher/CMakeLists.txt
++++ b/examples/external_launcher/CMakeLists.txt
+@@ -10,5 +10,5 @@ foreach(src ${sources})
+     install(TARGETS ${executable} RUNTIME DESTINATION ${CCL_INSTALL_EXAMPLES}/external_launcher OPTIONAL)
+ endforeach()
+ 
+-configure_file(run.sh ${CCL_INSTALL_EXAMPLES}/external_launcher/run.sh @ONLY)
+-configure_file(run_binary.sh ${CCL_INSTALL_EXAMPLES}/external_launcher/run_binary.sh @ONLY)
++#configure_file(run.sh ${CCL_INSTALL_EXAMPLES}/external_launcher/run.sh @ONLY)
++#configure_file(run_binary.sh ${CCL_INSTALL_EXAMPLES}/external_launcher/run_binary.sh @ONLY)

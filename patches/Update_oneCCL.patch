@@ -1,0 +1,20 @@
+Index: torch-ccl/third_party/oneCCL/src/CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(revision 47daeb71a8f04d6a08e3c46e7dc3b496e7ce4a33)
++++ torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(date 1626857506304)
+@@ -260,10 +260,10 @@
+
+ # link with release_mt libmpi.so for oneAPI Base toolkit
+ # libccl.so -> cpu_icc/cpu_gpu_dpcpp -> lib -> latest -> ccl -> mpi -> ...
+-set(ONEAPI_IMPI_RPATH "'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
++set(ONEAPI_IMPI_RPATH "'$ORIGIN':'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
+ set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
+
+-target_link_libraries(ccl PUBLIC
++target_link_libraries(ccl PRIVATE
+                       dl
+                       pthread
+                       fabric

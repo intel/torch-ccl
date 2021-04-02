@@ -43,6 +43,18 @@ std::map<c10d::ReduceOp, ccl::reduction> cclOps =
     {ReduceOp::PRODUCT, ccl::reduction::prod},
   };
 
+
+std::map<at::ScalarType, ccl::datatype> cclDatatypes =
+  {
+    {at::kByte, ccl::datatype::uint8},
+    {at::kChar, ccl::datatype::uint8},
+    {at::kDouble, ccl::datatype::float64},
+    {at::kBFloat16, ccl::datatype::bfloat16},
+    {at::kFloat, ccl::datatype::float32},
+    {at::kInt, ccl::datatype::int32},
+    {at::kLong, ccl::datatype::int64}
+  };
+
 // Get the key from the list of devices
 std::string get_key_from_devs(const std::vector<at::Device>& devices) {
   std::string key = DeviceTypeName(devices[0].type(), /* lower case */ true) + ":";
@@ -69,6 +81,106 @@ std::vector<at::Device> get_device_list(const std::vector<std::vector<at::Tensor
     res.push_back(tensor[0].device());
   }
   return res;
+}
+
+FlatCheckResult computeLengthsAndCheckFlat(
+        const std::vector<at::Tensor>& tensors,
+        std::vector<size_t>& lengths)
+{
+  int64_t groupSize = lengths.size();
+  auto firstTensor = tensors[0];
+  int64_t offset = 0;
+  auto firstLength = firstTensor.numel();
+  auto storage = firstTensor.storage();
+  auto firstStorageOffset = firstTensor.storage_offset();
+  bool isFlat = true;
+
+  for (int i = 0; i < groupSize; i++)
+  {
+    auto& curTensor = tensors[i];
+    int64_t length = curTensor.numel();
+
+    if (firstLength == 0 && length != 0)
+    {
+      firstLength = length;
+      firstTensor = curTensor;
+      storage = curTensor.storage();
+      firstStorageOffset = curTensor.storage_offset();
+    }
+
+    lengths[i] = length;
+
+    if (isFlat && length != 0 &&
+        (!storage.is_alias_of(curTensor.storage()) ||
+         curTensor.storage_offset() != firstStorageOffset + offset))
+      isFlat = false;
+
+    offset += length;
+  }
+
+  return FlatCheckResult{isFlat, offset, firstTensor};
+}
+
+bool computeLengthsAndCheckAndGetFlat(
+        const std::vector<at::Tensor>& tensors,
+        std::vector<size_t>& lengths,
+        at::Tensor& flatTensor,
+        int64_t& flatLength)
+{
+  auto flatRes = computeLengthsAndCheckFlat(tensors, lengths);
+
+  flatLength = flatRes.size;
+
+  if (flatRes.isFlat)
+  {
+    flatTensor = flatRes.firstTensor;
+  }
+  else
+  {
+    flatTensor = at::empty({flatRes.size}, flatRes.firstTensor.options());
+  }
+
+  return flatRes.isFlat;
+}
+
+void checkSingleTensorHelper(const at::Tensor& tensor)
+{
+  TORCH_CHECK(tensor.is_sparse() || tensor.is_contiguous(), "input dense tensor has to be contiguous");
+  TORCH_CHECK(!tensor.is_cuda(), "CUDA tensor detected and CCL doesn't support CUDA buffers");
+  TORCH_CHECK(tensor.numel() >= 0, "input tensor numel should be non-negative");
+}
+
+void checkSingleTensor(const std::vector<at::Tensor>& tensors)
+{
+  TORCH_CHECK(tensors.size() == 1,
+              "CCL process group does not support tensors count " + std::to_string(tensors.size()));
+
+  checkSingleTensorHelper(tensors[0]);
+}
+
+
+void checkSameType(const at::Tensor& tensor,
+                   const std::vector<at::Tensor>& tensors)
+{
+  for (size_t i = 0; i < tensors.size(); ++i)
+  {
+    TORCH_CHECK(tensors[i].scalar_type() == tensor.scalar_type(),
+                "Tensors are not equal in data type");
+    TORCH_CHECK(tensors[i].device().type() == tensor.device().type(),
+                "Tensors are not in same device type. Expect: ", tensor.device().type(),
+                " But got: ", tensors[i].device().type());
+
+    checkSingleTensorHelper(tensors[i]);
+  }
+}
+
+void checkSameType(const at::Tensor& tensor,
+                   const std::vector<std::vector<at::Tensor>>& tensors)
+{
+  for (size_t i = 0; i < tensors.size(); ++i)
+  {
+    checkSameType(tensor, tensors[i]);
+  }
 }
 
 }

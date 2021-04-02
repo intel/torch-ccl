@@ -41,7 +41,21 @@
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
-#include <ccl_comm_collector.h>
+
+namespace torch_ccl {
+struct CCLCommCollector;
+
+static inline void format_tensors_param(std::vector<c10::IValue>& param, const at::Tensor& tensor) {
+  param.emplace_back(tensor);
+}
+
+template <typename T>
+static inline void format_tensors_param(std::vector<c10::IValue>& param, const std::vector<T>& vec) {
+  for (const auto& elem : vec) {
+    format_tensors_param(param, elem);
+  }
+}
+}
 
 namespace c10d {
 
@@ -54,16 +68,32 @@ namespace c10d {
 //
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
+
 class ProcessGroupCCL : public ProcessGroup
 {
 
 public:
-
   class AsyncWorkCCL : public ProcessGroup::Work {
   public:
     AsyncWorkCCL() : Work() {};
 
     virtual void run() = 0;
+
+    std::exception_ptr exception() const override {
+      return exception_;
+    }
+
+    int sourceRank() const override {
+      throw std::runtime_error(
+              "sourceRank() may only be called on work objects "
+              "that correspond to a recv or recv-from-any call.");
+    }
+
+    c10::intrusive_ptr<c10::ivalue::Future> getFuture() override {
+      TORCH_CHECK(false, "ProcessGroupCCL::AsyncWorkCCL::getFuture not implemented.")
+    }
+
+    void synchronize() override {}
 
   public:
 
@@ -167,34 +197,11 @@ public:
   static void cclInitOnce();
   static void cclFini();
 
-  ccl::shared_ptr_class<ccl::kvs> get_kvs();
-
   // Store that is used to exchange information between processes.
   std::shared_ptr<Store> store_;
   std::chrono::milliseconds op_timeout_millis;
-  // ccl kvs to identify the community.
-  ccl::shared_ptr_class<ccl::kvs> kvs;
 
-  // The CCL communicator that the process group has cached.
-  // The key is a list of devices that an operation is operating on
-  // The devices are stored in a device sequence and the cache CCL
-  // communicator is associated with this device sequence
-  //
-  // e.g. If the process group op only uses device 0, then the value of
-  // the used device string stored (value of the hashmap) would be "0".
-  //
-  //      If the process group op uses device 0 - 7 and the each tensor of the
-  //      input tensor list is on device, 0, 1, 2, 3, 4, 5, 6, 7 separately,
-  //      then the value of the used device string (key) stored would be
-  //      "0,1,2,3,4,5,6,7"
-  //
-  //      If the process group op uses device 0 - 7 and the each tensor of the
-  //      input tensor list is on device, 0, 4, 5, 6, 7, 1, 2, 3 separately,
-  //      then the value of the used device string stored would be
-  //      "0,4,5,6,7,1,2,3"
-  //
-  //      Note that the order of the device for the tensor list matters.
-  std::unordered_map<std::string, std::shared_ptr<torch_ccl::Comms>> ccl_comms;
+  std::unique_ptr<torch_ccl::CCLCommCollector> ccl_member_;
 
   static std::mutex globalMutex;
 };

@@ -118,10 +118,8 @@ TAGS
 # Visual Studio Code files
 .vscode
 .vs
+.idea
 
 # Files generated when a patch is rejected
 *.orig
 *.rej
-
-# Pycharm & CLion files
-.idea

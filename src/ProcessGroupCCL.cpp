@@ -29,13 +29,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "ProcessGroupCCL.hpp"
-#include "dispatch_stub.h"
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
 #include <ATen/record_function.h>
-#include "utils.h"
+#include <ccl_comm_collector.h>
+#include "ProcessGroupCCL.hpp"
+#include "dispatch_stub.h"
+#include "env.h"
 
 
 namespace c10d
@@ -43,6 +44,7 @@ namespace c10d
 
 using torch_ccl::DispatchStub;
 using torch_ccl::call_with_lock;
+using torch_ccl::format_tensors_param;
 
 namespace {
 
@@ -87,54 +89,34 @@ std::shared_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 
 ProcessGroupCCL::ProcessGroupCCL(const std::shared_ptr<Store>& store, int rank, int size, const std::chrono::milliseconds& op_time_out)
     : ProcessGroup(rank, size), store_(store), op_timeout_millis(op_time_out),
-      kvs(nullptr)
-{}
+      ccl_member_(std::make_unique<torch_ccl::CCLCommCollector>())
+{
+#ifdef NDEBUG
+    TORCH_CHECK(!torch_ccl_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
+#else
+  if (torch_ccl_wait_gdb()) {
+    volatile int gwf = 0;
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    printf("PID %d on %s ready for attach\n", getpid(), hostname);
+    fflush(stdout);
+    while (0 == gwf)
+      sleep(5);
+  }
+#endif
+}
 
 ProcessGroupCCL::~ProcessGroupCCL()
 {
-}
-
-ccl::shared_ptr_class<ccl::kvs> ProcessGroupCCL::get_kvs() {
-  ccl::shared_ptr_class<ccl::kvs>& kvs = this->kvs;
-
-  if (kvs)
-    return kvs;
-  // Each process group is with different store, so we use the unique key for
-  // broadcast the bootstrap network information.
-  std::string storeKey = "ccl_kvs";
-
-  // Rank 0 broadcast the bootstrap network information to other ranks
-  if (getRank() == 0) {
-    call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-      kvs = ccl::create_main_kvs();
-    });
-    ccl::kvs::address_type main_addr = kvs->get_address();
-    auto ccl_kvs_addr = std::vector<uint8_t>(main_addr.begin(), main_addr.end());
-    store_->set(storeKey, ccl_kvs_addr);
-  }
-  else {
-    auto ccl_kvs_addr = store_->get(storeKey);
-    if (ccl_kvs_addr.size() != ccl::kvs::address_max_size) {
-      throw std::runtime_error(
-              "Unexpected ccl kvs addr from the store\n");
-    }
-    ccl::kvs::address_type main_addr;
-    std::copy_n(std::make_move_iterator(ccl_kvs_addr.begin()),
-                ccl::kvs::address_max_size,
-                main_addr.begin());
-    call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-      kvs = ccl::create_kvs(main_addr);
-    });
-  }
-
-  return kvs;
 }
 
 std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
     std::vector<at::Tensor>& tensors,
     const BroadcastOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::broadcast", std::vector<c10::IValue>{tensors});
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("torch_ccl::broadcast", tensor_param);
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::broadcast(tensors, opts, *this);
@@ -147,7 +129,9 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
   std::vector<at::Tensor>& tensors,
   const AllreduceOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::allreduce", std::vector<c10::IValue>{tensors});
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("torch_ccl::allreduce", tensor_param);
 
   auto work = DispatchStub::allreduce(tensors, opts, *this);
   work->run();
@@ -165,7 +149,9 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
     std::vector<at::Tensor>& tensors,
     const ReduceOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::reduce", std::vector<c10::IValue>{tensors});
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("torch_ccl::reduce", tensor_param);
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::reduce(tensors, opts, *this);
@@ -179,7 +165,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
     std::vector<at::Tensor>& inputTensors,
     const AllgatherOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::allgather", std::vector<c10::IValue>({inputTensors, outputTensors}));
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("torch_ccl::allgather", tensor_param);
 
   auto work = DispatchStub::allgather(outputTensors, inputTensors, opts, *this);
   work->run();
@@ -207,7 +196,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
     std::vector<at::Tensor>& inputTensors,
     const GatherOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::gather", std::vector<c10::IValue>({inputTensors, outputTensors}));
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("torch_ccl::gather", tensor_param);
 
   auto work = DispatchStub::gather(outputTensors, inputTensors, opts, *this);
   work->run();
@@ -219,7 +211,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
     std::vector<std::vector<at::Tensor>>& inputTensors,
     const ScatterOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::scatter", std::vector<c10::IValue>({inputTensors, outputTensors}));
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("torch_ccl::scatter", tensor_param);
 
   auto work = DispatchStub::scatter(outputTensors, inputTensors, opts, *this);
   work->run();
@@ -241,7 +236,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
     std::vector<int64_t>& inputSplitSizes,
     const AllToAllOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::alltoall_base", std::vector<c10::IValue>({inputTensor, outputTensor}));
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensor);
+  format_tensors_param(tensor_param, outputTensor);
+  RECORD_FUNCTION("torch_ccl::alltoall_base", tensor_param);
 
   auto work = DispatchStub::alltoall_base(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, *this);
   work->run();
@@ -253,7 +251,10 @@ std::shared_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
     std::vector<at::Tensor>& inputTensors,
     const AllToAllOptions& opts)
 {
-  RECORD_FUNCTION("torch_ccl::alltoall", std::vector<c10::IValue>({inputTensors, outputTensors}));
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("torch_ccl::alltoall", tensor_param);
 
   auto work = DispatchStub::alltoall(outputTensors, inputTensors, opts, *this);
   work->run();

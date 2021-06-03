@@ -103,7 +103,7 @@ profiling.py
 import torch.nn.parallel
 import torch.distributed as dist
 import torch_ccl
-mport os
+import os
 
 os.environ['MASTER_ADDR'] = '127.0.0.1'
 os.environ['MASTER_PORT'] = '29500'

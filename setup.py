@@ -6,6 +6,7 @@ import shutil
 import multiprocessing
 from subprocess import check_call, check_output
 
+import torch
 from torch.utils.cpp_extension import include_paths, library_paths
 from setuptools import setup, Extension, distutils
 from setuptools.command.build_ext import build_ext
@@ -153,6 +154,7 @@ def get_python_c_module():
         # braces warnings, see
         # https://bugs.llvm.org/show_bug.cgi?id=21629
         '-Wno-missing-braces',
+        '-D_GLIBCXX_USE_CXX11_ABI=' + str(int(torch._C._GLIBCXX_USE_CXX11_ABI)),
     ]
 
     def make_relative_rpath(path):

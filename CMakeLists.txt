@@ -21,13 +21,6 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
-# Find OneCCL Lib
-set(DEPENDS_LIB)
-find_package(oneCCL REQUIRED)
-list(APPEND DEPENDS_LIB ${ONECCL_LIBRARIES})
-
-SET(LIB_NAME "torch_ccl")
-
 #workaroud patch for oneCCL link issue
 find_package(Patch)
 if(Patch_FOUND)
@@ -37,6 +30,13 @@ else()
 endif()
 set (patch_file "${CMAKE_CURRENT_SOURCE_DIR}/patches/Fix_the_link_path_issue_in_oneCCL.patch")
 execute_process(COMMAND ${Patch_EXECUTABLE} -p1 -i ${patch_file} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Find OneCCL Lib
+set(DEPENDS_LIB)
+find_package(oneCCL REQUIRED)
+list(APPEND DEPENDS_LIB ${ONECCL_LIBRARIES})
+
+SET(LIB_NAME "torch_ccl")
 
 add_subdirectory(./src)
 

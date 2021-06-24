@@ -89,7 +89,8 @@ class BuildCMakeExt(build_ext):
         build_options = {
             # The value cannot be easily obtained in CMakeLists.txt.
             'PYTHON_INCLUDE_DIRS': str(distutils.sysconfig.get_python_inc()),
-            'PYTORCH_INSTALL_DIR': os.path.join(torch_include_dir, '..'),
+            'PYTORCH_INCLUDE_DIRS': CMakeExtension.convert_cmake_dirs(include_paths()),
+            'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
         }
 
         extension.generate(build_options, my_env, build_dir, install_dir)

@@ -28,8 +28,8 @@ if(Patch_FOUND)
 else()
   message(FATAL_ERROR, "Did not find patch")
 endif()
-set (patch_file "${CMAKE_CURRENT_SOURCE_DIR}/patches/Fix_the_link_path_issue_in_oneCCL.patch")
-execute_process(COMMAND ${Patch_EXECUTABLE} -p1 -i ${patch_file} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+set (patch_file "${CMAKE_CURRENT_SOURCE_DIR}/patches/oneCCL.patch")
+execute_process(COMMAND ${Patch_EXECUTABLE} -p1 -i ${patch_file} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/oneCCL)
 
 # Find OneCCL Lib
 set(DEPENDS_LIB)

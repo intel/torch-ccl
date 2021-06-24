@@ -1,0 +1,100 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e4dce00..fa3f90c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -253,9 +253,9 @@ configure_file(cmake/vars.sh.in ${CMAKE_CURRENT_BINARY_DIR}/vars.sh @ONLY)
+ configure_file(cmake/setvars.sh.in ${CMAKE_CURRENT_BINARY_DIR}/setvars.sh @ONLY)
+ configure_file(cmake/ccl ${CMAKE_CURRENT_BINARY_DIR}/ccl @ONLY)
+ configure_file(third-party-programs.txt ${CMAKE_CURRENT_BINARY_DIR}/third-party-programs.txt COPYONLY)
+-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/vars.sh DESTINATION ${CCL_INSTALL_ENV})
+-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/setvars.sh DESTINATION ${CCL_INSTALL_ENV})
+-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/ccl DESTINATION ${CCL_INSTALL_MODULE})
++#install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/vars.sh DESTINATION ${CCL_INSTALL_ENV})
++#install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/setvars.sh DESTINATION ${CCL_INSTALL_ENV})
++#install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/ccl DESTINATION ${CCL_INSTALL_MODULE})
+ install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/third-party-programs.txt DESTINATION ${CCL_INSTALL_LICENSE})
+ install(PROGRAMS ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${CCL_INSTALL_LICENSE})
+ 
+@@ -274,14 +274,14 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+ #include other CMakeLists
+ 
+ add_subdirectory(src)
+-add_subdirectory(examples/benchmark)
+-add_subdirectory(examples/common)
+-add_subdirectory(examples/cpu)
++#add_subdirectory(examples/benchmark)
++#add_subdirectory(examples/common)
++#add_subdirectory(examples/cpu)
+ if (CCL_ENABLE_SYCL)
+     add_subdirectory(examples/sycl)
+ endif()
+ 
+-add_subdirectory(tests/functional)
++#add_subdirectory(tests/functional)
+ 
+ if (BUILD_UT)
+     #add_subdirectory(tests/unit)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index d5a25c0..a15695c 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -240,20 +240,21 @@ else()
+         set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR} VERSION ${LIB_SO_VERSION} SOVERSION ${LIB_MAJOR_VERSION})
+ endif()
+ install(TARGETS ccl LIBRARY DESTINATION ${CCL_INSTALL_LIB})
+-install(FILES
+-    "../cmake/FindOpenCL.cmake"
+-    "../cmake/FindL0.cmake"
+-    "../cmake/FindSYCL.cmake"
+-    "../cmake/FindIntelSYCL.cmake"
+-    "../cmake/FindComputeCpp.cmake"
+-    DESTINATION ${CCL_INSTALL_LIB})
++
++#install(FILES
++#    "../cmake/FindOpenCL.cmake"
++#    "../cmake/FindL0.cmake"
++#    "../cmake/FindSYCL.cmake"
++#    "../cmake/FindIntelSYCL.cmake"
++#    "../cmake/FindComputeCpp.cmake"
++#    DESTINATION ${CCL_INSTALL_LIB})
+ 
+ 
+ #static library
+ add_library(ccl-static STATIC $<TARGET_OBJECTS:ccl-objects>)
+ set_target_properties(ccl-static PROPERTIES OUTPUT_NAME ccl)
+ set_target_properties(ccl-static PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})
+-install(TARGETS ccl-static ARCHIVE DESTINATION ${CCL_INSTALL_LIB} OPTIONAL)
++#install(TARGETS ccl-static ARCHIVE DESTINATION ${CCL_INSTALL_LIB} OPTIONAL)
+ 
+ if(MULTI_GPU_SUPPORT)
+     message("Turn on L0 multi-gpu unit tests")
+@@ -266,8 +267,8 @@ if(MULTI_GPU_SUPPORT)
+ endif(MULTI_GPU_SUPPORT)
+ 
+ #headers installation
+-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/
+-        DESTINATION ${CCL_INSTALL_INCLUDE} FILES_MATCHING REGEX ".*\\.(h|hpp)$")
++#install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/
++#        DESTINATION ${CCL_INSTALL_INCLUDE} FILES_MATCHING REGEX ".*\\.(h|hpp)$")
+ 
+ #mpi & ofi rt
+ file(GLOB mpi_bins "${PROJECT_SOURCE_DIR}/mpi/bin/*")
+@@ -276,14 +277,14 @@ install(PROGRAMS ${mpi_bins} DESTINATION ${CCL_INSTALL_BIN})
+ install(DIRECTORY ${PROJECT_SOURCE_DIR}/ofi/lib/
+         DESTINATION ${CCL_INSTALL_LIB})
+ 
+-install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/include/
+-        DESTINATION ${CCL_INSTALL_INCLUDE})
++#install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/include/
++#        DESTINATION ${CCL_INSTALL_INCLUDE})
+ 
+ install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/lib/
+         DESTINATION ${CCL_INSTALL_LIB})
+ 
+-install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/etc/
+-        DESTINATION ${CCL_INSTALL_ETC})
++#install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/etc/
++#        DESTINATION ${CCL_INSTALL_ETC})
+ 
+ install(DIRECTORY ${PROJECT_SOURCE_DIR}/mpi/licensing/
+         DESTINATION ${CCL_INSTALL_LICENSE}/mpi/)

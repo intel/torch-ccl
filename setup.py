@@ -81,6 +81,7 @@ class BuildCMakeExt(build_ext):
 
         build_dir.mkdir(parents=True, exist_ok=True)
         install_dir = TORCH_CCL_PATH
+        torch_include_dir = CMakeExtension.convert_cmake_dirs(include_paths())
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
@@ -88,8 +89,7 @@ class BuildCMakeExt(build_ext):
         build_options = {
             # The value cannot be easily obtained in CMakeLists.txt.
             'PYTHON_INCLUDE_DIRS': str(distutils.sysconfig.get_python_inc()),
-            'PYTORCH_INCLUDE_DIRS': CMakeExtension.convert_cmake_dirs(include_paths()),
-            'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
+            'PYTORCH_INSTALL_DIR': os.path.join(torch_include_dir, '..'),
         }
 
         extension.generate(build_options, my_env, build_dir, install_dir)

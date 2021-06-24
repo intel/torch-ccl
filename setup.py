@@ -81,7 +81,6 @@ class BuildCMakeExt(build_ext):
 
         build_dir.mkdir(parents=True, exist_ok=True)
         install_dir = TORCH_CCL_PATH
-        torch_include_dir = CMakeExtension.convert_cmake_dirs(include_paths())
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()

@@ -7,7 +7,7 @@ target_compile_options(torch_ccl PUBLIC -Wall
         -Wno-sign-compare
         -Wno-unused-function)
 
-	target_include_directories(torch_ccl PUBLIC ${ONECCL_INCLUDE_DIR} ${PYTHON_INCLUDE_DIRS} ${PYTORCH_INCLUDE_DIRS} ${IPEX_INCLUDE_DIRS} ./)
+target_include_directories(torch_ccl PUBLIC ${ONECCL_INCLUDE_DIR} ${PYTHON_INCLUDE_DIRS} ${PYTORCH_INCLUDE_DIRS} ${IPEX_INCLUDE_DIRS} ./)
 
 get_target_property(mpi_lib mpi IMPORTED_LOCATION)
 get_filename_component(MPI_LIBRARY_DIRS ${mpi_lib} DIRECTORY)

@@ -35,9 +35,18 @@ index e4dce00..fa3f90c 100644
  if (BUILD_UT)
      #add_subdirectory(tests/unit)
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index d5a25c0..a15695c 100644
+index d5a25c0..b644a4a 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
+@@ -232,7 +232,7 @@ link_directories(${LIBFABRIC_LIB_DIR})
+ add_library(ccl SHARED $<TARGET_OBJECTS:ccl-objects>)
+ target_include_directories(ccl PUBLIC ${CCL_INC_DIRS})
+ # link with release_mt libmpi.so for oneAPI Base toolkit
+-set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,../../../../mpi/latest/lib/release_mt/")
++set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
+ target_link_libraries(ccl PUBLIC dl pthread ${EXTERNAL_LIBS} ${COMPUTE_RUNTIME_TARGET_NAME} fabric mpi)
+ if (NOT LIB_SO_VERSION AND NOT LIB_MAJOR_VERSION)
+         set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})
 @@ -240,20 +240,21 @@ else()
          set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR} VERSION ${LIB_SO_VERSION} SOVERSION ${LIB_MAJOR_VERSION})
  endif()

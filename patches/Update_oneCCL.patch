@@ -1,0 +1,48 @@
+Index: torch-ccl/third_party/oneCCL/CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- torch-ccl/third_party/oneCCL/CMakeLists.txt	(revision 6a98d9d1883c134fd03e825f41db508cc38bf251)
++++ torch-ccl/third_party/oneCCL/CMakeLists.txt	(date 1619345730022)
+@@ -239,15 +239,15 @@
+ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+
+ #generate oneCCLConfig*.cmake
+-configure_file("cmake/templates/oneCCLConfig.cmake.in"
+-               "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfig.cmake"
+-               COPYONLY)
++#configure_file("cmake/templates/oneCCLConfig.cmake.in"
++#               "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfig.cmake"
++#               COPYONLY)
+
+ set(PROJECT_VERSION "${CCL_MAJOR_VERSION}.${CCL_MINOR_VERSION}.${CCL_UPDATE_VERSION}")
+
+-configure_file("cmake/templates/oneCCLConfigVersion.cmake.in"
+-               "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfigVersion.cmake"
+-               @ONLY)
++#configure_file("cmake/templates/oneCCLConfigVersion.cmake.in"
++#               "${CCL_INSTALL_LIB}/cmake/oneCCL/oneCCLConfigVersion.cmake"
++#               @ONLY)
+
+ #include other CMakeLists
+
+Index: torch-ccl/third_party/oneCCL/src/CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(revision 6a98d9d1883c134fd03e825f41db508cc38bf251)
++++ torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(date 1619346461362)
+@@ -253,9 +253,9 @@
+ # link with release_mt libmpi.so for oneAPI Base toolkit
+ # libccl.so -> cpu_icc/cpu_gpu_dpcpp -> lib -> latest -> ccl -> mpi -> ... 
+ set(ONEAPI_IMPI_RPATH "'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
+-set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
++set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
+ 
+-target_link_libraries(ccl PUBLIC dl pthread ${EXTERNAL_LIBS} ${COMPUTE_BACKEND_TARGET_NAME} fabric mpi)
++target_link_libraries(ccl PRIVATE dl pthread ${EXTERNAL_LIBS} ${COMPUTE_BACKEND_TARGET_NAME} fabric mpi)
+ if (NOT LIB_SO_VERSION AND NOT LIB_MAJOR_VERSION)
+         set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})
+ else()

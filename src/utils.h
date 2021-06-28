@@ -31,17 +31,20 @@
 
 #pragma once
 
-#include "ProcessGroupCCL.hpp"
+#include <unistd.h>
 #include <ATen/detail/FunctionTraits.h>
 #include <ATen/record_function.h>
 #include <c10d/Types.hpp>
+#include <ccl_comm_collector.h>
+#include "ProcessGroupCCL.hpp"
 
 #define CCL_CHECK(cmd)                                               \
   do {                                                               \
     try {                                                            \
         cmd;                                                         \
     }                                                                \
-    catch (std::runtime_error& e) {                                  \
+    catch (ccl::exception& e) {                                      \
+      e.what();                                                      \
       throw e;                                                       \
     }                                                                \
   }while(0)
@@ -67,6 +70,7 @@ namespace torch_ccl {
 using c10d::ProcessGroupCCL;
 
 extern std::map<c10d::ReduceOp, ccl::reduction> cclOps;
+extern std::map<at::ScalarType, ccl::datatype> cclDatatypes;
 
 // Get the deviceList String from the list of devices
 std::string get_key_from_devs(const std::vector<at::Device>& devices);
@@ -145,6 +149,12 @@ private:
 
 };
 
+c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
+        const std::vector<std::vector<at::Tensor>>& outputTensors);
+
+c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
+        const std::vector<at::Tensor>& outputTensors);
+
 template <typename> struct is_tuple: std::false_type {};
 
 template <typename ...T> struct is_tuple<std::tuple<T...>>: std::true_type {};
@@ -160,7 +170,9 @@ public:
                    const std::vector<OutputType>& outputs,
                    const RunF f,
                    CommType& comms,
-                   attr_t& attr) : AsyncWorkCCL(), f(f), comms(comms), attr(attr), inputs(inputs), outputs(outputs) {}
+                   attr_t& attr) : AsyncWorkCCL(), f(f), comms(comms), attr(attr), inputs(inputs), outputs(outputs) {
+    future_ = createFutureAsOutput(this->outputs);
+  }
 
   void run() override {
     using Indices = std::make_index_sequence<num_params - 4>;
@@ -171,10 +183,14 @@ public:
   {
     if (!rets.empty()) {
       std::cerr << "attempted destruction of WorkCCL before work has completed, "
-                << "terminating the program."
+                << "waiting the request."
                 << std::endl;
-      std::terminate();
+      wait(std::chrono::milliseconds(0));
     }
+  }
+
+  c10::intrusive_ptr<c10::ivalue::Future> getFuture() {
+    return future_;
   }
 
   bool isCompleted() override
@@ -200,7 +216,11 @@ public:
 
   bool wait(std::chrono::milliseconds timeout) override
   {
-    RECORD_FUNCTION(std::string("torch_ccl::wait::") + debugName, std::vector<c10::IValue>());
+    std::vector<c10::IValue> tensor_param;
+    format_tensors_param(tensor_param, inputs);
+    format_tensors_param(tensor_param, outputs);
+
+    RECORD_FUNCTION(std::string("torch_ccl::wait::") + debugName, tensor_param);
     for(auto& ret : rets) {
       ccl::event& evt = _get_event_from_ret<ret_t>(ret);
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
@@ -271,6 +291,8 @@ private:
   std::vector<InputType> inputs;
   std::vector<OutputType> outputs;
   std::vector<ret_t> rets;
+  // The future returned by getFuture.
+  c10::intrusive_ptr<at::ivalue::Future> future_;
 };
 
 template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
@@ -301,7 +323,10 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   const auto key = get_key_from_devs(devices);
   auto& comms = get_ccl_fn(pg_ccl, key, devices);
 
-  return make_work_ccl(inputs, outputs, fun, comms, attr);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = make_work_ccl(inputs, outputs, fun, comms, attr);
+
+  return work;
 }
 
 template <Comms& (*get_ccl_fn)(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices),
@@ -319,5 +344,31 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
     [](std::vector<ccl::stream>&) {},
     [](std::vector<ccl::stream>&) {});
 }
+
+typedef struct
+{
+  bool isFlat;
+  int64_t size;
+  at::Tensor firstTensor;
+} FlatCheckResult;
+
+FlatCheckResult computeLengthsAndCheckFlat(
+        const std::vector<at::Tensor>& tensors,
+        std::vector<size_t>& lengths);
+
+bool computeLengthsAndCheckAndGetFlat(
+        const std::vector<at::Tensor>& tensors,
+        std::vector<size_t>& lengths,
+        at::Tensor& flatTensor,
+        int64_t& flatLength);
+
+void checkSingleTensorHelper(const at::Tensor& tensor);
+
+void checkSingleTensor(const std::vector<at::Tensor>& tensors);
+
+void checkSameType(const at::Tensor& tensor, const std::vector<at::Tensor>& tensors);
+
+void checkSameType(const at::Tensor& tensor,
+                   const std::vector<std::vector<at::Tensor>>& tensors);
 
 }

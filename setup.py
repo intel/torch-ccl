@@ -1,4 +1,9 @@
 # DEBUG build with debug
+#
+#   USE_SYSTEM_ONECCL=0
+#     disables use of system-wide oneCCL (we will use our submoduled
+#     copy in third_party/oneCCL)
+
 import os
 import sys
 import pathlib
@@ -6,15 +11,17 @@ import shutil
 import multiprocessing
 from subprocess import check_call, check_output
 
-from torch.utils.cpp_extension import include_paths, library_paths
-from setuptools import setup, Extension, distutils
-from setuptools.command.build_ext import build_ext
+import torch
+from torch.utils.cpp_extension import BuildExtension, CppExtension, library_paths
+from setuptools import setup
 from distutils.command.clean import clean
 from tools.setup.cmake import CMakeExtension
+from tools.setup.env import get_compiler
 
 # Constant known variables used throughout this file
 CWD = os.path.dirname(os.path.abspath(__file__))
 TORCH_CCL_PATH = os.path.join(CWD, "torch_ccl")
+
 
 def check_file(f):
     if not os.path.exists(f):
@@ -55,7 +62,7 @@ def create_version():
     return version
 
 
-class BuildCMakeExt(build_ext):
+class BuildCMakeExt(BuildExtension):
     """
     Builds using cmake instead of the python setuptools implicit build
     """
@@ -65,7 +72,14 @@ class BuildCMakeExt(build_ext):
         """
         cmake_extensions = [ext for ext in self.extensions if isinstance(ext, CMakeExtension)]
         for ext in cmake_extensions:
+            try:
+                # temp patch the oneCCL code
+                check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
+            except:
+                # ignore patch fail
+                pass
             self.build_cmake(ext)
+
 
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
         super(BuildCMakeExt, self).run()
@@ -87,17 +101,36 @@ class BuildCMakeExt(build_ext):
 
         build_options = {
             # The value cannot be easily obtained in CMakeLists.txt.
-            'PYTHON_INCLUDE_DIRS': str(distutils.sysconfig.get_python_inc()),
-            'PYTORCH_INCLUDE_DIRS': CMakeExtension.convert_cmake_dirs(include_paths()),
+            'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
             'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
+            # skip the example and test code in oneCCL
+            'BUILD_EXAMPLES': 'OFF',
+            'BUILD_CONFIG': 'OFF',
+            'BUILD_UT': 'OFF',
+            'BUILD_FT': 'OFF'
         }
+
+        runtime = 'gcc'
+        if 'COMPUTE_BACKEND' in os.environ:
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+                runtime = 'dpcpp'
+                build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
+                from torch_ipex import cmake_prefix_path as ipex_cmake_prefix_path
+                build_options['CMAKE_PREFIX_PATH'] = \
+                    CMakeExtension.convert_cmake_dirs([torch.utils.cmake_prefix_path, ipex_cmake_prefix_path])
+
+        cc, cxx = get_compiler(runtime)
+        build_options['CMAKE_C_COMPILER'] = cc
+        build_options['CMAKE_CXX_COMPILER'] = cxx
 
         extension.generate(build_options, my_env, build_dir, install_dir)
 
-        max_jobs = os.getenv('MAX_JOBS', str(multiprocessing.cpu_count()))
-        build_args = ['-j', max_jobs]
-        check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir), env=my_env)
-        check_call(['make', 'install'], cwd=str(build_dir), env=my_env)
+        build_args = ['-j', str(multiprocessing.cpu_count())]
+        check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
+        if 'COMPUTE_BACKEND' in os.environ:
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+                check_call(['make', 'torch_ccl_xpu'] + build_args, cwd=str(build_dir))
+        check_call(['make', 'install'], cwd=str(build_dir))
 
 
 class Clean(clean):
@@ -128,12 +161,11 @@ def get_python_c_module():
     main_compile_args = []
     main_libraries = ['torch_ccl']
     main_link_args = []
-    main_sources = ["torch_ccl/csrc/_C.cpp"]
+    main_sources = ["torch_ccl/csrc/_C.cpp", "torch_ccl/csrc/init.cpp"]
     lib_path = os.path.join(TORCH_CCL_PATH, "lib")
     library_dirs = [lib_path]
     include_path = os.path.join(CWD, "src")
-    include_dirs = include_paths()
-    include_dirs.append(include_path)
+    include_dirs = [include_path]
     extra_link_args = []
     extra_compile_args = [
         '-Wall',
@@ -158,14 +190,14 @@ def get_python_c_module():
     def make_relative_rpath(path):
         return '-Wl,-rpath,$ORIGIN/' + path
 
-    _c_module = Extension("torch_ccl._C",
-                          libraries=main_libraries,
-                          sources=main_sources,
-                          language='c',
-                          extra_compile_args=main_compile_args + extra_compile_args,
-                          include_dirs=include_dirs,
-                          library_dirs=library_dirs,
-                          extra_link_args=extra_link_args + main_link_args + [make_relative_rpath('lib')])
+    _c_module = CppExtension("torch_ccl._C",
+                             libraries=main_libraries,
+                             sources=main_sources,
+                             language='c',
+                             extra_compile_args=main_compile_args + extra_compile_args,
+                             include_dirs=include_dirs,
+                             library_dirs=library_dirs,
+                             extra_link_args=extra_link_args + main_link_args + [make_relative_rpath('lib')])
 
     return _c_module
 
@@ -180,7 +212,6 @@ if __name__ == '__main__':
         version=version,
         ext_modules=modules,
         packages=['torch_ccl'],
-        install_requires=['torch'],
         package_data={
             'torch_ccl': [
                 '*.py',

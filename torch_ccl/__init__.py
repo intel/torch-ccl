@@ -2,13 +2,23 @@ import os
 import sys
 import warnings
 from .version import __version__, git_version
+import torch
 
-cwd = cwd = os.path.dirname(os.path.abspath(__file__))
+cwd = os.path.dirname(os.path.abspath(__file__))
 
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
 os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
 
 from . import _C as ccl_lib
+
+if hasattr(torch, 'xpu'):
+    if torch.xpu.is_available():
+        # try:
+        # load the CCL/XPU library
+        import ctypes
+        my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/libtorch_ccl_xpu.so"))
+        # except OSError:
+        #     print("Cannot load xpu CCL. CCL doesn't work for XPU device")
 
 __all__ = []
 __all__ += [name for name in dir(ccl_lib)

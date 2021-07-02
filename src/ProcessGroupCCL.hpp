@@ -41,7 +41,21 @@
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
-#include <ccl_comm_collector.h>
+
+namespace torch_ccl {
+struct CCLCommCollector;
+
+static inline void format_tensors_param(std::vector<c10::IValue>& param, const at::Tensor& tensor) {
+  param.emplace_back(tensor);
+}
+
+template <typename T>
+static inline void format_tensors_param(std::vector<c10::IValue>& param, const std::vector<T>& vec) {
+  for (const auto& elem : vec) {
+    format_tensors_param(param, elem);
+  }
+}
+}
 
 namespace c10d {
 
@@ -54,11 +68,11 @@ namespace c10d {
 //
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
+
 class ProcessGroupCCL : public ProcessGroup
 {
 
 public:
-
   class AsyncWorkCCL : public ProcessGroup::Work {
   public:
     AsyncWorkCCL() : Work() {};
@@ -72,10 +86,10 @@ public:
     friend class ProcessGroupCCL;
   };
 
-  explicit ProcessGroupCCL(const std::shared_ptr<Store>& store,
+  explicit ProcessGroupCCL(const c10::intrusive_ptr<Store>& store,
                            int rank,
                            int size,
-                           const std::chrono::milliseconds& op_time_out);
+                           const std::chrono::duration<float>& op_time_out);
   virtual ~ProcessGroupCCL();
 
   c10::intrusive_ptr<ProcessGroup::Work> broadcast(
@@ -100,7 +114,7 @@ public:
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
-  c10::intrusive_ptr<ProcessGroup::Work> allgather_base(
+  c10::intrusive_ptr<ProcessGroup::Work> _allgather_base(
       at::Tensor& outputBuffer,
       at::Tensor& inputBuffer,
       const AllgatherOptions& opts = AllgatherOptions()) override;
@@ -155,11 +169,11 @@ public:
       const BarrierOptions& opts = BarrierOptions()) override;
 
   // create a new ProcessGroupCCL and initialize CCL if not initialized
-  static std::shared_ptr<ProcessGroup> createProcessGroupCCL(
-      const std::shared_ptr<Store>& store,
+  static c10::intrusive_ptr<ProcessGroup> createProcessGroupCCL(
+      const c10::intrusive_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      const std::chrono::milliseconds& op_time_out =
+      const std::chrono::duration<float>& op_time_out =
       std::chrono::milliseconds(OP_TIMEOUT_MILLIS));
   static const int64_t OP_TIMEOUT_MILLIS;
  public:
@@ -167,34 +181,11 @@ public:
   static void cclInitOnce();
   static void cclFini();
 
-  ccl::shared_ptr_class<ccl::kvs> get_kvs();
-
   // Store that is used to exchange information between processes.
-  std::shared_ptr<Store> store_;
-  std::chrono::milliseconds op_timeout_millis;
-  // ccl kvs to identify the community.
-  ccl::shared_ptr_class<ccl::kvs> kvs;
+  c10::intrusive_ptr<Store> store_;
+  std::chrono::duration<float> op_timeout_millis;
 
-  // The CCL communicator that the process group has cached.
-  // The key is a list of devices that an operation is operating on
-  // The devices are stored in a device sequence and the cache CCL
-  // communicator is associated with this device sequence
-  //
-  // e.g. If the process group op only uses device 0, then the value of
-  // the used device string stored (value of the hashmap) would be "0".
-  //
-  //      If the process group op uses device 0 - 7 and the each tensor of the
-  //      input tensor list is on device, 0, 1, 2, 3, 4, 5, 6, 7 separately,
-  //      then the value of the used device string (key) stored would be
-  //      "0,1,2,3,4,5,6,7"
-  //
-  //      If the process group op uses device 0 - 7 and the each tensor of the
-  //      input tensor list is on device, 0, 4, 5, 6, 7, 1, 2, 3 separately,
-  //      then the value of the used device string stored would be
-  //      "0,4,5,6,7,1,2,3"
-  //
-  //      Note that the order of the device for the tensor list matters.
-  std::unordered_map<std::string, std::shared_ptr<torch_ccl::Comms>> ccl_comms;
+  std::unique_ptr<torch_ccl::CCLCommCollector> ccl_member_;
 
   static std::mutex globalMutex;
 };

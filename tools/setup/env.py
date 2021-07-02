@@ -8,9 +8,13 @@ IS_LINUX = (platform.system() == 'Linux')
 BUILD_DIR = 'build'
 
 
-def _get_complier(runtime):
-    cc = which('cc')
-    cpp = which('c++')
+def get_compiler(runtime):
+    if runtime == 'dpcpp':
+        cc = which('clang')
+        cpp = which('clang++')
+    else:
+        cc = which('cc')
+        cpp = which('c++')
     return cc, cpp
 
 

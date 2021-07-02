@@ -34,6 +34,7 @@
 #include <c10/core/Device.h>
 #include <oneapi/ccl.hpp>
 #include <unordered_map>
+#include "ProcessGroupCCL.hpp"
 
 namespace torch_ccl {
 
@@ -69,6 +70,41 @@ public:
   ccl::vector_class<ccl::communicator> comms;
   // The streams used by CCL
   ccl::vector_class<ccl::stream> streams;
+};
+
+struct CCLCommCollector {
+
+  CCLCommCollector() : kvs(nullptr) {};
+
+  ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store);
+
+  std::shared_ptr<torch_ccl::Comms> get_comms(const std::string& devices_key);
+  void add_comms(const std::string& devices_key, std::shared_ptr<torch_ccl::Comms> comms);
+
+  // ccl kvs to identify the community.
+  ccl::shared_ptr_class<ccl::kvs> kvs;
+
+  // Collects the ccl communicator that the process group has used.
+  // The key is a list of devices that an operation is operating on
+  // The devices are stored in a device sequence and the cache CCL
+  // communicator is associated with this device sequence
+  //
+  // e.g. If the process group op only uses device 0, then the value of
+  // the used device string stored (value of the hashmap) would be "0".
+  //
+  //      If the process group op uses device 0 - 7 and the each tensor of the
+  //      input tensor list is on device, 0, 1, 2, 3, 4, 5, 6, 7 separately,
+  //      then the value of the used device string (key) stored would be
+  //      "0,1,2,3,4,5,6,7"
+  //
+  //      If the process group op uses device 0 - 7 and the each tensor of the
+  //      input tensor list is on device, 0, 4, 5, 6, 7, 1, 2, 3 separately,
+  //      then the value of the used device string stored would be
+  //      "0,4,5,6,7,1,2,3"
+  //
+  //      Note that the order of the device for the tensor list matters.
+  std::unordered_map<std::string, std::shared_ptr<torch_ccl::Comms>> ccl_comms;
+
 };
 
 }

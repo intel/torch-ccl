@@ -17,6 +17,7 @@ We recommend Anaconda as Python package management system. The following is the 
    | ``torch`` | ``torch-ccl`` |  
    | :-----:| :---: |  
    |  ``master`` |  ``master``  |
+   | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1) |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)   | 
    | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1) |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)   | 
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0) |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)   | 
    | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3) |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)   |
@@ -27,7 +28,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 Python 3.6 or later and a C++17 compiler
 
-pytorch-v1.7.1.
+pytorch-v1.8.1.
 
 # Installation
 
@@ -61,8 +62,8 @@ import torch_ccl
 
 os.environ['MASTER_ADDR'] = '127.0.0.1'
 os.environ['MASTER_PORT'] = '29500'
-os.environ['RANK'] = os.environ.get('PMI_RANK', -1)
-os.environ['WORLD_SIZE'] = os.environ.get('PMI_SIZE', -1)
+os.environ['RANK'] = str(os.environ.get('PMI_RANK', 0))
+os.environ['WORLD_SIZE'] = str(os.environ.get('PMI_SIZE', 1))
 
 backend = 'ccl'
 dist.init_process_group(backend, ...)
@@ -107,8 +108,8 @@ import os
 
 os.environ['MASTER_ADDR'] = '127.0.0.1'
 os.environ['MASTER_PORT'] = '29500'
-os.environ['RANK'] = os.environ.get('PMI_RANK', -1)
-os.environ['WORLD_SIZE'] = os.environ.get('PMI_SIZE', -1)
+os.environ['RANK'] = str(os.environ.get('PMI_RANK', 0))
+os.environ['WORLD_SIZE'] = str(os.environ.get('PMI_SIZE', 1))
 
 backend = 'ccl'
 dist.init_process_group(backend)

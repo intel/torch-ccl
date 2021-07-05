@@ -175,7 +175,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
   return work;
 }
 
-c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_base(
+c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::_allgather_base(
       at::Tensor& outputBuffer,
       at::Tensor& inputBuffer,
       const AllgatherOptions& /* unused */)

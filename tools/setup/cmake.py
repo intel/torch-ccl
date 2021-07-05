@@ -134,7 +134,7 @@ class CMakeExtension(Extension):
 
     @staticmethod
     def _cmake_value(value):
-        if value is str:
+        if type(value) is str:
             if value.startswith(('OFF', '0', 'False', 'FALSE')):
                 return False
             if value.startswith(('ON', '1', 'True', 'TRUE')):
@@ -216,7 +216,9 @@ class CMakeExtension(Extension):
                 cmake_cache_vars = defaultdict(lambda: False)
 
             cache_build_options = CMakeExtension.extract(cmake_args)
-            if all(option in cmake_cache_vars and CMakeExtension._cmake_value(cache_build_options[option]) == CMakeExtension._cmake_value(cmake_cache_vars[option]) for option in cache_build_options):
+            if all(option in cmake_cache_vars and
+                   CMakeExtension._cmake_value(cache_build_options[option]) == CMakeExtension._cmake_value(cmake_cache_vars[option])
+                   for option in cache_build_options):
                 # Everything's in place. Do not rerun.
                 return
         self._run(cmake_args, env=env)

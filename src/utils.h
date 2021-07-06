@@ -189,10 +189,6 @@ public:
     }
   }
 
-  c10::intrusive_ptr<c10::ivalue::Future> getFuture() {
-    return future_;
-  }
-
   bool isCompleted() override
   {
     for(auto& ret : rets) {

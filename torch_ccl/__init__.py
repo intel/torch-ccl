@@ -1,14 +1,18 @@
 import os
 import sys
 import warnings
-from .version import __version__, git_version
 import torch
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
 os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
+if not os.path.exists(os.path.join(cwd, "version.py")):
+    raise RuntimeError("torch_ccl is not installed!")
+if not os.path.exists(os.path.join(cwd, "lib/"))
+    raise RuntimeError("Seems you are importing torch_ccl under it's root path, please change path and try again!")
 
+from .version import __version__, git_version
 from . import _C as ccl_lib
 
 if hasattr(torch, 'xpu'):

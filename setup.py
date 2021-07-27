@@ -8,7 +8,6 @@ import os
 import sys
 import pathlib
 import shutil
-import multiprocessing
 from subprocess import check_call, check_output
 
 import torch
@@ -125,7 +124,7 @@ class BuildCMakeExt(BuildExtension):
 
         extension.generate(build_options, my_env, build_dir, install_dir)
 
-        build_args = ['-j', str(multiprocessing.cpu_count())]
+        build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp':

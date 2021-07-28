@@ -1,7 +1,7 @@
 "Manages CMake."
-import multiprocessing
 import os
 import re
+import shutil
 from subprocess import check_call, check_output
 import sys
 import distutils
@@ -9,8 +9,6 @@ import distutils.sysconfig
 from distutils.version import LooseVersion
 from setuptools import Extension
 from collections import defaultdict
-
-from . import which
 from .env import BUILD_DIR, check_env_flag
 # from .numpy_ import USE_NUMPY, NUMPY_INCLUDE_DIR
 
@@ -26,7 +24,7 @@ def _mkdir_p(d):
 # Use ninja if it is on the PATH. Previous version of PyTorch required the
 # ninja python package, but we no longer use it, so we do not have to import it
 # USE_NINJA = (not check_negative_env_flag('USE_NINJA') and
-#              which('ninja') is not None)
+#              shutil.which('ninja') is not None)
 def convert_cmake_value_to_python_value(cmake_value, cmake_type):
     r"""Convert a CMake value in a string form to a Python value.
 
@@ -114,10 +112,10 @@ class CMakeExtension(Extension):
     def _get_cmake_command():
         """Returns cmake command."""
 
-        cmake_command = which('cmake')
-        cmake3 = which('cmake3')
+        cmake_command = shutil.which('cmake')
+        cmake3 = shutil.which('cmake3')
         if cmake3 is not None:
-            cmake = which('cmake')
+            cmake = shutil.which('cmake')
             if cmake is not None:
                 bare_version = CMakeExtension._get_version(cmake)
                 if (bare_version < LooseVersion("3.5.0") and

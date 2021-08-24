@@ -1,28 +1,25 @@
+import operator
+from functools import reduce, wraps
+import math
+import torch
+from torch.testing._internal.common_distributed import MultiProcessTestCase, \
+    simple_sparse_reduce_tests, TEST_SKIPS, TestSkip
+from torch.testing._internal.common_utils import run_tests
 import sys
 import os
-import torch
 
 try:
-    import torch_ipex
-    xpu_is_avaliable = torch.xpu.is_available()
-except ImportError:
-    # ignore the torch_ipex
-    xpu_is_avaliable = False
-    pass
+    import torch_ipex as ipex
+except:
+    try:
+        import ipex
+    except:
+        pass
 
 import torch_ccl
-from torch.testing._internal.common_utils import run_tests
-from torch.testing._internal.common_distributed import MultiProcessTestCase, \
-     simple_sparse_reduce_tests, \
-     TEST_SKIPS, \
-     TestSkip
-
 import torch.distributed as c10d
 
-import math
-from functools import reduce, wraps
-import operator
-
+xpu_is_avaliable = hasattr(torch, "xpu") and torch.xpu.is_available()
 cpu_device = torch.device("cpu")
 
 
@@ -92,6 +89,7 @@ def simple_reduce_tests(rank, world_size):
     ]
     return tests
 
+
 class ProcessGroupCCLTest(MultiProcessTestCase):
 
     def setUp(self):
@@ -111,7 +109,6 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             opts.rootRank = -1
             opts.rootTensor = 0
             pg.broadcast([t1], opts)
-
 
     def _test_broadcast_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
@@ -148,7 +145,6 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_broadcast_basics_multi_xpu(self):
         self._test_broadcast_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
-
     def _test_broadcast_stress(self, inputs):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -169,7 +165,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_broadcast_stress(self):
         inputs = [torch.tensor([i * self.world_size + self.rank]) for i in range(1000)]
         self._test_broadcast_stress(inputs)
-    
+
     def _test_allreduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -182,7 +178,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             tensor = fn(input)
             work = pg.allreduce([tensor], opts)
             work.wait()
-            
+
             # TODO(#38095): Replace assertEqualIgnoreType. See issue #38095
             self.assertEqualIgnoreType(output, tensor)
 
@@ -200,7 +196,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def _test_reduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
-        
+
         for (op, input, output) in simple_reduce_tests(self.rank, self.world_size):
 
             for root in range(self.world_size):
@@ -271,16 +267,16 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
         # Run with 1 input tensor per rank
         for n in range(self.world_size):
-            input= [fn(torch.tensor([n * self.rank]))]
+            input = [fn(torch.tensor([n * self.rank]))]
             output = [
                 [
                     fn(torch.tensor([-1])) for _ in range(self.world_size)
-                ] 
+                ]
             ]
             expected_output = [
                 [
-                    torch.tensor([i*n]) for i in range(self.world_size)
-                ] 
+                    torch.tensor([i * n]) for i in range(self.world_size)
+                ]
             ]
             work = pg.allgather(output, input)
             work.wait()
@@ -298,8 +294,8 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_allgather_basics_multi_xpu(self):
         self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
-
     # alltoall_base
+
     def _test_alltoall_base_equal_split_helper(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -314,7 +310,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work = pg.alltoall_base(out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-   
+
     def _test_alltoall_base_unequal_split_helper(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -328,10 +324,10 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         expected_tensor = fn(torch.cat([torch.ones([rank + 1, size]) * i for i in group]))
 
         work = pg.alltoall_base(
-             out_tensor, in_tensor, out_splits, in_splits)
+            out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-        
+
     def test_allotall_equal_split_basics(self):
         self._test_alltoall_base_equal_split_helper(lambda t: t.clone())
 
@@ -354,7 +350,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_allotall_unequal_split_basics_multi_xpu(self):
         self._test_alltoall_base_unequal_split_helper(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
-    #alltoall
+    # alltoall
     def _test_all_to_all_helper(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -376,7 +372,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work.wait()
         for t1, t2 in zip(out_tensors, expected_tensors):
             self.assertEqual(t1.cpu(), t2.cpu())
-        
+
     def test_alltoall_basics(self):
         self._test_all_to_all_helper(lambda t: t.clone())
 

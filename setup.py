@@ -115,8 +115,15 @@ class BuildCMakeExt(BuildExtension):
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                from torch_ipex import include_paths as ipex_include_paths
-                from torch_ipex import library_paths as ipex_library_paths
+                try:
+                    from torch_ipex import include_paths as ipex_include_paths
+                    from torch_ipex import library_paths as ipex_library_paths
+                except:
+                    from ipex import include_paths as ipex_include_paths
+                    from ipex import library_paths as ipex_library_paths
+                except: 
+                    raise ImportError("torch_ipex/ipex not found!")
+
                 build_options['IPEX_INCLUDE_DIRS'] = CMakeExtension.convert_cmake_dirs(ipex_include_paths())
                 build_options['IPEX_LIBRARY_DIRS'] = CMakeExtension.convert_cmake_dirs(ipex_library_paths())
 

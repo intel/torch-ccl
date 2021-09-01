@@ -28,7 +28,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 Python 3.6 or later and a C++17 compiler
 
-pytorch-v1.8.1.
+pytorch above 1.9, you can also use pytorch master to install it by source.
 
 # Installation
 

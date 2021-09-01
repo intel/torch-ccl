@@ -121,7 +121,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::broadcast(tensors, opts, *this);
 
-  work->run();
   return work;
 }
 
@@ -134,7 +133,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
   RECORD_FUNCTION("torch_ccl::allreduce", tensor_param);
 
   auto work = DispatchStub::allreduce(tensors, opts, *this);
-  work->run();
   return work;
 }
 
@@ -155,7 +153,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::reduce(tensors, opts, *this);
-  work->run();
   return work;
 }
 
@@ -171,7 +168,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
   RECORD_FUNCTION("torch_ccl::allgather", tensor_param);
 
   auto work = DispatchStub::allgather(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
@@ -202,7 +198,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
   RECORD_FUNCTION("torch_ccl::gather", tensor_param);
 
   auto work = DispatchStub::gather(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
@@ -217,7 +212,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
   RECORD_FUNCTION("torch_ccl::scatter", tensor_param);
 
   auto work = DispatchStub::scatter(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 
@@ -242,7 +236,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
   RECORD_FUNCTION("torch_ccl::alltoall_base", tensor_param);
 
   auto work = DispatchStub::alltoall_base(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, *this);
-  work->run();
   return work;
 }
 
@@ -257,7 +250,6 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
   RECORD_FUNCTION("torch_ccl::alltoall", tensor_param);
 
   auto work = DispatchStub::alltoall(outputTensors, inputTensors, opts, *this);
-  work->run();
   return work;
 }
 

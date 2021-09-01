@@ -189,29 +189,16 @@ public:
     }
   }
 
-  bool isCompleted() override
-  {
-    for(auto& ret : rets) {
-      bool flag;
-      ccl::event& req = _get_event_from_ret<ret_t>(ret);
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(flag = req.test());
-      });
-      if (!flag) {
-        return false;
-      }
-    }
-    // all request has been finished
-    return true;
-  }
-
   bool isSuccess() const override
   {
     throw std::runtime_error("invalid call to ::isSuccess.");
   }
 
-  bool wait(std::chrono::milliseconds timeout) override
-  {
+  c10::intrusive_ptr<c10::ivalue::Future> getFuture() {
+    return future_;
+  }
+
+  void finishAsyncWorkCCL() {
     std::vector<c10::IValue> tensor_param;
     format_tensors_param(tensor_param, inputs);
     format_tensors_param(tensor_param, outputs);
@@ -225,17 +212,15 @@ public:
     }
     rets.clear();
     // Always return true, because abort API is not implemented.
-    return true;
+    //     return true;
+    //
+    future_->markCompleted(at::IValue(outputs));
+    finish();
   }
 
-  void abort() override
-  {
-    TORCH_CHECK(false, "ProcessGroupCCL::WorkCCL::abort not implemented");
-  }
-
-  std::vector<at::Tensor> result() override
-  {
-    return result_wrap_<OutputType>();
+  void finishAsyncWorkCCLError(std::exception_ptr eptr) override {
+    future_->setError(eptr);
+    finish();
   }
 
 private:

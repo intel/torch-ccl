@@ -78,10 +78,13 @@ public:
     AsyncWorkCCL() : Work() {};
 
     virtual void run() = 0;
-
+    virtual void finishAsyncWorkCCL(){};
+    virtual void finishAsyncWorkCCLError(std::exception_ptr eptr){};
+    //virtual c10::intrusive_ptr<c10::ivalue::Future> getFuture() = 0;
   public:
 
     std::string debugName;
+
 
     friend class ProcessGroupCCL;
   };

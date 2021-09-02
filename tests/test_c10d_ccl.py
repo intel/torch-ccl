@@ -3,10 +3,10 @@ import os
 import torch
 
 try:
-    import torch_ipex
+    import ipex
     xpu_is_avaliable = torch.xpu.is_available()
 except ImportError:
-    # ignore the torch_ipex
+    # ignore the ipex
     xpu_is_avaliable = False
     pass
 

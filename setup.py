@@ -117,10 +117,6 @@ class BuildCMakeExt(BuildExtension):
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
                 import ipex
                 build_options['CMAKE_PREFIX_PATH'] += ";" + ipex.cmake_prefix_path
-                # from torch_ipex import include_paths as ipex_include_paths
-                # from torch_ipex import library_paths as ipex_library_paths
-                # build_options['IPEX_INCLUDE_DIRS'] = CMakeExtension.convert_cmake_dirs(ipex_include_paths())
-                # build_options['IPEX_LIBRARY_DIRS'] = CMakeExtension.convert_cmake_dirs(ipex_library_paths())
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc

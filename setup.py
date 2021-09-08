@@ -21,6 +21,8 @@ from tools.setup.env import get_compiler
 CWD = os.path.dirname(os.path.abspath(__file__))
 TORCH_CCL_PATH = os.path.join(CWD, "torch_ccl")
 
+def _check_env_flag(name, default=''):
+  return os.getenv(name, default).upper() in ['ON', '1', 'YES', 'TRUE', 'Y']
 
 def check_file(f):
     if not os.path.exists(f):
@@ -97,8 +99,13 @@ class BuildCMakeExt(BuildExtension):
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
+        build_type = 'Release'
+
+        if _check_env_flag('DEBUG'):
+            build_type = 'Debug'
 
         build_options = {
+            'CMAKE_BUILD_TYPE' : build_type,
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
             'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),

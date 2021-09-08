@@ -17,18 +17,19 @@ We recommend Anaconda as Python package management system. The following is the 
    | ``torch`` | ``torch-ccl`` |  
    | :-----:| :---: |  
    |  ``master`` |  ``master``  |
+   | [v1.9.0](https://github.com/pytorch/pytorch/tree/v1.9.0) |  [ccl_torch1.9](https://github.com/intel/torch-ccl/tree/ccl_torch1.9)   |
    | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1) |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)   | 
    | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1) |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)   | 
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0) |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)   | 
    | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3) |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)   |
 
-The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.7 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable ``alltoall`` collective communication primitive. The patch file about these two PRs is in ``patches`` directory and you can use it directly. 
+The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.9 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable ``alltoall`` collective communication primitive. The patch file about these two PRs is in ``patches`` directory and you can use it directly. 
 
 # Requirements
 
 Python 3.6 or later and a C++17 compiler
 
-pytorch-v1.8.1.
+pytorch above 1.9, you can also use pytorch master to install it by source.
 
 # Installation
 

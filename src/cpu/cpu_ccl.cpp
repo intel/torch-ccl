@@ -29,11 +29,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
+
 #include <ProcessGroupCCL.hpp>
 #include <dispatch_stub.h>
 #include <ATen/record_function.h>
 #include "../utils.h"
-
 
 namespace torch_ccl
 {
@@ -113,9 +120,13 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg, const std::string& devices_key, 
 class VanillaCPU final: public DispatchStub {
 public:
 
-  VanillaCPU() {}
+  VanillaCPU() {
+    stop_=false;
+    workerThread_ = std::thread(&VanillaCPU::runLoop, this);
+  }
 
-  ~VanillaCPU() {}
+  ~VanillaCPU() {destroy();}
+
 
 protected:
 
@@ -156,10 +167,19 @@ protected:
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
-
+  void destroy();
   void reset() override {}
-
+  void runLoop();
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> enqueue(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work);
 private:
+  bool stop_;
+  std::mutex pgMutex_;
+  std::thread workerThread_;
+
+  std::deque<c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>> queue_;
+  std::condition_variable queueProduceCV_;
+  std::condition_variable queueConsumeCV_;
+
 };
 
 struct RegisterCPUPMethods {
@@ -229,12 +249,59 @@ void sparseAllreduceCompletionFn(
   return ;
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::enqueue(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work) {
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  queue_.push_back(work);
+  lock.unlock();
+  queueProduceCV_.notify_one();
+  return work;
+}
+
+void VanillaCPU::destroy() {
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  queueConsumeCV_.wait(lock, [&] { return queue_.empty(); });
+
+  // Queue is empty, signal stop
+  stop_ = true;
+
+  // Release lock to allow threads to terminate
+  lock.unlock();
+  queueProduceCV_.notify_all();
+
+  // Join the single worker thread
+  workerThread_.join();
+}
+
+void VanillaCPU::runLoop() {
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  while (!stop_) {
+    if (queue_.empty()) {
+      queueProduceCV_.wait(lock);
+      continue;
+    }
+
+    auto work = std::move(queue_.front());
+
+    queue_.pop_front();
+
+    lock.unlock();
+    queueConsumeCV_.notify_one();
+
+    try {
+      work->finishAsyncWorkCCL();
+    } catch (...) {
+      work->finishAsyncWorkCCLError(std::current_exception());
+    }
+
+    lock.lock();
+  }
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::vector<at::Tensor>& tensors,
                                                                       const AllreduceOptions& opts,
                                                                       ProcessGroupCCL& pg) {
   checkSingleTensor(tensors);
   const auto& layout = tensors[0].layout();
-
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   if (layout == c10::kStrided) {
     work = collective<get_ccl_comms>(
@@ -257,7 +324,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::ve
                 });
                 return ret_evt;
             });
-
     work->debugName = std::string("cpu::allreduce");
 
   } else if (layout == c10::kSparse) {
@@ -323,7 +389,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::ve
 
     work->debugName = std::string("cpu::sparse_allreduce");
   }
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -356,7 +423,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vecto
           });
 
   work->debugName = std::string("cpu::reduce");
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -386,7 +454,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::ve
           });
 
   work->debugName = std::string("cpu::broadcast");
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -453,7 +522,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::ve
     });
 
   work->debugName = std::string("cpu::allgather");
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -543,7 +613,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vecto
   });
     
   work->debugName = std::string("cpu::gather");
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -632,7 +703,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at:
   }
 
   work->debugName = std::string("cpu::alltoall_base");
-
+  work->run();
+  enqueue(work);
   return work;
 }
 
@@ -716,6 +788,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_(std::vec
   });
  
   work->debugName = std::string("cpu::alltoall_base");
+  work->run();
+  enqueue(work);
   return work;
 }
 

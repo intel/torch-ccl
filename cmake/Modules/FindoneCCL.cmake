@@ -24,7 +24,7 @@ IF (USE_SYSTEM_ONECCL)
         set(oneapi_root_hint $ENV{INTELONEAPIROOT})
     endif()
 
-    IF(COMPUTE_BACKEND STREQUAL "dpcpp")
+    IF(COMPUTE_BACKEND STREQUAL "dpcpp_level_zero")
         SET(CCL_CONFIGURATION "cpu_gpu_dpcpp")
     ELSE()
         SET(CCL_CONFIGURATION "cpu_icc")

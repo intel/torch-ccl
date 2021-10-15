@@ -5,7 +5,7 @@ from .version import __version__, git_version
 import torch
 
 cwd = os.path.dirname(os.path.abspath(__file__))
-
+os.environ['CCL_ROOT'] = cwd
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
 os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
 

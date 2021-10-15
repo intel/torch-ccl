@@ -112,7 +112,7 @@ class BuildCMakeExt(BuildExtension):
 
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
                 import ipex
@@ -127,7 +127,7 @@ class BuildCMakeExt(BuildExtension):
         build_args = ['-j', str(multiprocessing.cpu_count())]
         check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 check_call(['make', 'torch_ccl_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
@@ -226,6 +226,7 @@ if __name__ == '__main__':
                 'include/*.h*',
                 'lib/lib*',
                 'lib/prov/lib*',
+                'lib/kernels/*',
                 'licensing/*',
                 'modulefiles/*',
             ]},

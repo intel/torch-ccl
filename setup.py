@@ -35,7 +35,7 @@ def check_file(f):
 def create_version():
     """Create the version string for torch-ccl"""
     cwd = os.path.dirname(os.path.abspath(__file__))
-    package_name = os.getenv('CCL_PACKAGE_NAME', 'torch-ccl')
+    package_name = os.getenv('CCL_PACKAGE_NAME', 'oneccl-bind-pt')
     version = open('version.txt', 'r').read().strip()
     sha = 'Unknown'
 
@@ -44,14 +44,9 @@ def create_version():
     except Exception:
         pass
 
-    if os.getenv('PYTORCH_BUILD_VERSION'):
-        assert os.getenv('PYTORCH_BUILD_NUMBER') is not None
-        build_number = int(os.getenv('PYTORCH_BUILD_NUMBER'))
-        version = os.getenv('PYTORCH_BUILD_VERSION')
-        if build_number > 1:
-            version += '.post' + str(build_number)
-    elif sha != 'Unknown':
-        version += '+' + sha[:7]
+    if os.getenv('CCL_SHA_VERSION', False):
+        if sha != 'Unknown':
+            version += '+' + sha[:7]
 
     print("Building {}-{}".format(package_name, version))
 
@@ -60,7 +55,7 @@ def create_version():
         f.write("__version__ = '{}'\n".format(version))
         f.write("git_version = {}\n".format(repr(sha)))
 
-    return version
+    return version, package_name
 
 
 class BuildCMakeExt(BuildExtension):
@@ -209,12 +204,12 @@ def get_python_c_module():
 
 
 if __name__ == '__main__':
-    version = create_version()
+    version, package_name = create_version()
     c_module = get_python_c_module()
     cmake_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "CMakeLists.txt")
     modules = [CMakeExtension("libtorch_ccl", cmake_file), c_module]
     setup(
-        name='torch_ccl',
+        name=package_name,
         version=version,
         ext_modules=modules,
         packages=['torch_ccl'],

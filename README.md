@@ -17,6 +17,7 @@ We recommend Anaconda as Python package management system. The following is the 
    | ``torch`` | ``torch-ccl`` |  
    | :-----:| :---: |  
    |  ``master`` |  ``master``  |
+   | [v1.10.0](https://github.com/pytorch/pytorch/tree/v1.9.0) |  [ccl_torch1.10.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.10.100)   |
    | [v1.9.0](https://github.com/pytorch/pytorch/tree/v1.9.0) |  [ccl_torch1.9](https://github.com/intel/torch-ccl/tree/ccl_torch1.9)   |
    | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1) |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)   | 
    | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1) |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)   | 

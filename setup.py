@@ -75,6 +75,7 @@ class BuildCMakeExt(BuildExtension):
             try:
                 # temp patch the oneCCL code
                 check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
+                check_call(["git", "apply", "./patches/unlink_torchlib.patch"], cwd=CWD)
             except:
                 # ignore patch fail
                 pass

@@ -1,26 +1,26 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index 58cf3fd..676dfa1 100644
+index 676dfa1..58cf3fd 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -17,7 +17,7 @@ target_include_directories(torch_ccl PUBLIC ${ONECCL_INCLUDE_DIR} ${TORCH_INCLUD
  
  
  target_link_libraries(torch_ccl PUBLIC ${DEPENDS_LIB})
--#target_link_libraries(torch_ccl PUBLIC ${TORCH_LIBRARIES})
-+target_link_libraries(torch_ccl PUBLIC ${TORCH_LIBRARIES})
+-target_link_libraries(torch_ccl PUBLIC ${TORCH_LIBRARIES})
++#target_link_libraries(torch_ccl PUBLIC ${TORCH_LIBRARIES})
  
  set_target_properties(torch_ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
  
 diff --git a/src/gpu/CMakeLists.txt b/src/gpu/CMakeLists.txt
-index 80b2461..3cb632a 100644
+index 3cb632a..80b2461 100644
 --- a/src/gpu/CMakeLists.txt
 +++ b/src/gpu/CMakeLists.txt
 @@ -13,7 +13,7 @@ target_link_directories(torch_ccl_xpu PUBLIC ${PYTORCH_LIBRARY_DIRS})
  
  
  target_link_libraries(torch_ccl_xpu PUBLIC ${ONECCL_LIBRARIES})
--#target_link_libraries(torch_ccl_xpu PUBLIC ${TORCH_LIBRARIES})
-+target_link_libraries(torch_ccl_xpu PUBLIC ${TORCH_LIBRARIES})
+-target_link_libraries(torch_ccl_xpu PUBLIC ${TORCH_LIBRARIES})
++#target_link_libraries(torch_ccl_xpu PUBLIC ${TORCH_LIBRARIES})
  target_link_libraries(torch_ccl_xpu PUBLIC torch_ccl)
  target_link_libraries(torch_ccl_xpu PUBLIC torch_python)
  target_link_libraries(torch_ccl_xpu PUBLIC ipex)

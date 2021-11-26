@@ -66,6 +66,7 @@ class BuildCMakeExt(BuildExtension):
     """
     Builds using cmake instead of the python setuptools implicit build
     """
+
     def run(self):
         """
         Perform build_cmake before doing the 'normal' stuff
@@ -74,13 +75,24 @@ class BuildCMakeExt(BuildExtension):
         for ext in cmake_extensions:
             try:
                 # temp patch the oneCCL code
-                check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
-                check_call(["git", "apply", "./patches/unlink_torchlib.patch"], cwd=CWD)
-            except:
-                # ignore patch fail
+                if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
+                    check_call(["git", "apply", os.path.join(CWD, "patches/Update_Internal_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
+                else:
+                    check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
+            except Exception as e:
+                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+                print(e)
+                print("=" * 64)
                 pass
-            self.build_cmake(ext)
+            try:
+                check_call(["git", "apply", "./patches/unlink_torchlib.patch"], cwd=CWD)
+            except Exception as e:
+                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+                print(e)
+                print("=" * 64)
+                pass
 
+            self.build_cmake(ext)
 
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
         super(BuildCMakeExt, self).run()
@@ -111,6 +123,9 @@ class BuildCMakeExt(BuildExtension):
             'BUILD_FT': 'OFF'
         }
 
+        if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
+            build_options['USE_DEV_ONECCL'] = "ON"
+
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
@@ -137,6 +152,22 @@ class Clean(clean):
     def run(self):
         import glob
         import re
+        try:
+            check_call(["git", "reset", "--hard"], cwd=CWD)
+        except Exception as e:
+            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+            print(e)
+            print("=" * 64)
+        try:
+            if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
+                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
+            else:
+                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
+        except Exception as e:
+            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+            print(e)
+            print("=" * 64)
+
         with open('.gitignore', 'r') as f:
             ignores = f.read()
             pat = re.compile(r'^#( BEGIN NOT-CLEAN-FILES )?')

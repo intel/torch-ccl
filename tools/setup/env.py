@@ -10,8 +10,8 @@ BUILD_DIR = 'build'
 
 def get_compiler(runtime):
     if runtime == 'dpcpp':
-        cc = which('clang')
-        cpp = which('clang++')
+        cc = which('icx')
+        cpp = which('dpcpp')
     else:
         cc = which('cc')
         cpp = which('c++')

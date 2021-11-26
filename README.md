@@ -30,7 +30,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 Python 3.6 or later and a C++17 compiler
 
-pytorch above 1.9, you can also use pytorch master to install it by source.
+PyTorch v1.10.0
 
 # Installation
 

@@ -1,20 +1,13 @@
-Index: torch-ccl/third_party/oneCCL/src/CMakeLists.txt
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(revision 7f99b693798aa10b68a722f7e5a2e5e7b22a9388)
-+++ torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(date 1630335267139)
-@@ -260,10 +260,10 @@
+diff --git a/third_party/oneCCL/src/CMakeLists.txt b/third_party/oneCCL/src/CMakeLists.txt
+index 7b4cff9b..e3587da5 100644
+--- a/third_party/oneCCL/src/CMakeLists.txt
++++ b/third_party/oneCCL/src/CMakeLists.txt
+@@ -292,6 +292,8 @@ endif()
+ # shared library
+ add_library(ccl SHARED $<TARGET_OBJECTS:ccl-objects>)
+ target_include_directories(ccl PUBLIC ${SRC_INCLUDE_DIRS})
++set(ONEAPI_IMPI_RPATH "'$ORIGIN'")
++set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
+ target_link_libraries(ccl PRIVATE ${SRC_LINK_LIBS})
 
- # link with release_mt libmpi.so for oneAPI Base toolkit
- # libccl.so -> cpu_icc/cpu_gpu_dpcpp -> lib -> latest -> ccl -> mpi -> ...
--set(ONEAPI_IMPI_RPATH "'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
-+set(ONEAPI_IMPI_RPATH "'$ORIGIN':'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
- set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
-
--target_link_libraries(ccl PUBLIC
-+target_link_libraries(ccl PRIVATE
-                       dl
-                       pthread
-                       fabric
+ set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})

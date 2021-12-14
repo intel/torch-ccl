@@ -68,7 +68,7 @@ namespace c10d {
 //
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
-
+constexpr const char* CCL_BACKEND_NAME = "ccl";
 class ProcessGroupCCL : public ProcessGroup
 {
 
@@ -94,6 +94,10 @@ public:
                            int size,
                            const std::chrono::duration<float>& op_time_out);
   virtual ~ProcessGroupCCL();
+
+  const std::string getBackendName() const override {
+    return std::string(CCL_BACKEND_NAME);
+  }
 
   c10::intrusive_ptr<ProcessGroup::Work> broadcast(
       std::vector<at::Tensor>& data,

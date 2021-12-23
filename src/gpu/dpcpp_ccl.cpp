@@ -216,13 +216,17 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vect
       RECORD_FUNCTION("torch_ccl::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::allreduce", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr<scalar_t>(), output.data_ptr<scalar_t>(),
-                                                  (size_t)input.numel(), cclOps.at(opts.reduceOp), comm, stream, attr););
-        });
-    });
-    return ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
+                                             output.data_ptr(),
+                                             (size_t) input.numel(),
+                                             cclDatatypes.at(input.scalar_type()),
+                                             cclOps.at(opts.reduceOp),
+                                             comm,
+                                             stream,
+                                             attr););
+      });
+      return ret_evt;
   });
 
   work->debugName = std::string("xpu::allreduce");
@@ -286,11 +290,14 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vect
       RECORD_FUNCTION("torch_ccl::xpu::broadcast", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::broadcast", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr<scalar_t>(), (size_t)input.numel(), root,
-                                   comm, stream, attr););
-        });
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr(),
+                                             (size_t) input.numel(),
+                                             cclDatatypes.at(input.scalar_type()),
+                                             root,
+                                             comm,
+                                             stream,
+                                             attr));
       });
       return ret_evt;
     });

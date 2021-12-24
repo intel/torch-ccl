@@ -75,10 +75,7 @@ class BuildCMakeExt(BuildExtension):
         for ext in cmake_extensions:
             try:
                 # temp patch the oneCCL code
-                if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
-                    check_call(["git", "apply", os.path.join(CWD, "patches/Update_Internal_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
-                else:
-                    check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
+                check_call(["git", "apply", os.path.join(CWD, "patches/Update_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/oneCCL"))
             except Exception as e:
                 print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
                 print(e)
@@ -123,9 +120,6 @@ class BuildCMakeExt(BuildExtension):
             'BUILD_FT': 'OFF'
         }
 
-        if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
-            build_options['USE_DEV_ONECCL'] = "ON"
-
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
@@ -159,10 +153,7 @@ class Clean(clean):
             print(e)
             print("=" * 64)
         try:
-            if os.environ.get('USE_DEV_ONECCL', "OFF").upper() in ["1", "Y", "YES", "ON"]:
-                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
-            else:
-                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/Internal_oneCCL"))
+            check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
         except Exception as e:
             print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
             print(e)

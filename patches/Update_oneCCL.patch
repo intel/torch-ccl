@@ -1,36 +1,15 @@
-Index: torch-ccl/third_party/oneCCL/cmake/FindIntelSYCL_level_zero.cmake
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- torch-ccl/third_party/oneCCL/cmake/FindIntelSYCL_level_zero.cmake	(revision 2d3dd773af8f77589832b80ade3075d7eac77f2d)
-+++ torch-ccl/third_party/oneCCL/cmake/FindIntelSYCL_level_zero.cmake	(date 1634305871499)
-@@ -72,6 +72,9 @@
- if(IntelSYCL_level_zero_FOUND AND NOT TARGET Intel::SYCL_level_zero)
- 	get_target_property(LEVEL_ZERO_INCLUDE_DIRECTORIES ze_loader INTERFACE_INCLUDE_DIRECTORIES)
- 
-+    get_filename_component(EXTENSION_SYCL_INCLUDE_DIRS "${INTEL_SYCL_INCLUDE_DIRS}/.." ABSOLUTE)
-+    set(INTEL_SYCL_INCLUDE_DIRS "${INTEL_SYCL_INCLUDE_DIRS};${EXTENSION_SYCL_INCLUDE_DIRS}")
-+
-     add_library(Intel::SYCL_level_zero UNKNOWN IMPORTED)
- 	list(APPEND SYCL_LEVEL_ZERO_INCLUDE_DIRS "${LEVEL_ZERO_INCLUDE_DIRECTORIES}")
- 	list(APPEND SYCL_LEVEL_ZERO_INCLUDE_DIRS "${INTEL_SYCL_INCLUDE_DIRS}")
-Index: torch-ccl/third_party/oneCCL/src/CMakeLists.txt
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(revision 2d3dd773af8f77589832b80ade3075d7eac77f2d)
-+++ torch-ccl/third_party/oneCCL/src/CMakeLists.txt	(date 1634306166871)
-@@ -310,10 +310,10 @@
- 
- # link with release_mt libmpi.so for oneAPI Base toolkit
- # libccl.so -> cpu_icc/cpu_gpu_dpcpp -> lib -> latest -> ccl -> mpi -> ...
--set(ONEAPI_IMPI_RPATH "'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
-+set(ONEAPI_IMPI_RPATH "'$ORIGIN':'$ORIGIN'/../../../../mpi/latest/lib/release_mt/")
- set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 72e1eda..2eb06f5 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -294,7 +294,10 @@ endif()
+ add_library(ccl SHARED $<TARGET_OBJECTS:ccl-objects>)
+ target_include_directories(ccl PUBLIC ${SRC_INCLUDE_DIRS})
  
 -target_link_libraries(ccl PUBLIC ${SRC_LINK_LIBS})
++set(ONEAPI_IMPI_RPATH "'$ORIGIN'")
++set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
++
 +target_link_libraries(ccl PRIVATE ${SRC_LINK_LIBS})
  
  if (NOT LIB_SO_VERSION AND NOT LIB_MAJOR_VERSION)

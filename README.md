@@ -33,7 +33,7 @@ Python 3.6 or later and a C++17 compiler
 PyTorch v1.10.0
 
 # Installation
-
+## Source code install
 To install `torch-ccl`:
 
 1. clone the `torch-ccl`.
@@ -48,7 +48,16 @@ To install `torch-ccl`:
 ```bash
    python setup.py install
 ```
+## Wheel install 
+Wheel files are avaiable for the following Python versions.
 
+| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 |
+| :--: | :--: | :--: | :--: | :--: |
+| 1.10.0 | ✔️ | ✔️ | ✔️ | ✔️ |
+
+```python
+python -m pip install oneccl_bind_pt==1.10.0 -f https://software.intel.com/ipex-whl-stable
+```
 
 # Usage
 

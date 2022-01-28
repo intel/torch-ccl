@@ -40,17 +40,6 @@ namespace torch_ccl
 
 namespace {
 
-enum class
-SparseResultMode : std::uint8_t
-{
-  DIRECT,
-  OOP,
-  COPY
-};
-
-static ccl::sparse_coalesce_mode sparseCoalesceMode;
-static SparseResultMode sparseResultMode;
-
 // Type mapping
 
 std::map<ccl::datatype, at::ScalarType> ptDatatypes =
@@ -165,20 +154,6 @@ private:
 struct RegisterCPUPMethods {
   RegisterCPUPMethods() {
     static VanillaCPU methods;
-    sparseCoalesceMode = ccl::sparse_coalesce_mode::regular;
-    const char* sparseCoalesceModeEnv = getenv("CCL_SPARSE_COALESCE_MODE");
-    if (sparseCoalesceModeEnv)
-    {
-      sparseCoalesceMode = ccl::sparse_coalesce_mode(atoi(sparseCoalesceModeEnv));
-    }
-
-    sparseResultMode = SparseResultMode::DIRECT;
-    const char* sparseResultModeEnv = getenv("CCL_SPARSE_RESULT_MODE");
-    if (sparseResultModeEnv)
-    {
-      sparseResultMode = (SparseResultMode)atoi(sparseResultModeEnv);
-    }
-
     DispatchStub::register_ccl_stub(c10::DeviceType::CPU, &methods);
   }
 };
@@ -217,112 +192,34 @@ std::shared_ptr<cpu_completion_callback<RunF>> make_cpu_callback(RunF f) {
   return ret_ptr;
 }
 
-void sparseAllreduceCompletionFn(
-  const void* indBuf, size_t indCount, ccl::datatype indDatatype,
-  const void* valBuf, size_t valCount, ccl::datatype valDatatype,
-  const void* fnCtx)
-{
-  TORCH_CHECK(fnCtx, "null fn ctx");
-
-  callback_context* work_cts = (callback_context*)fnCtx;
-  work_cts->run_completion_hook(indBuf, indCount, indDatatype, valBuf, valCount, valDatatype);
-  return ;
-}
-
 std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::vector<at::Tensor>& tensors,
                                                                       const AllreduceOptions& opts,
                                                                       ProcessGroupCCL& pg) {
   checkSingleTensor(tensors);
-  const auto& layout = tensors[0].layout();
 
   std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  if (layout == c10::kStrided) {
-    work = collective<get_ccl_comms>(
-            pg,
-            tensors,
-            tensors,
-            [=](at::Tensor input,
-                at::Tensor output,
-                ccl::allreduce_attr attr,
-                ccl::communicator& comm){
-                ccl::event ret_evt;
-                call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                    CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
-                                                       output.data_ptr(),
-                                                       (size_t) input.numel(),
-                                                       cclDatatypes.at(input.scalar_type()),
-                                                       cclOps.at(opts.reduceOp),
-                                                       comm,
-                                                       attr););
-                });
-                return ret_evt;
-            });
-
-    work->debugName = std::string("cpu::allreduce");
-
-  } else if (layout == c10::kSparse) {
-    work = collective<get_ccl_comms>(
-      pg,
-      tensors,
-      tensors,
-      [=](at::Tensor input,
-          at::Tensor output,
-          ccl::sparse_allreduce_attr attr,
-          ccl::communicator& comm){
-            TORCH_CHECK(input.sparse_dim() == 1, "allreduce: only single sparse_dim is supported");
-
-            ccl::event ret_evt;
-            auto indices = input._indices();
-            auto values = input._values();
-
-            auto cpu_cb_ptr = make_cpu_callback(
-              [=](const void* indBuf, size_t indCount, ccl::datatype indDatatype, const void* valBuf, size_t valCount, ccl::datatype valDatatype) {
-                  const auto valueShape = input.sizes().slice(input.sparse_dim());
-                  auto resultValueShape = std::vector<int64_t>({(int64_t)indCount});
-                  std::copy(valueShape.begin(), valueShape.end(), std::back_inserter(resultValueShape));
-
-                  auto rawIndices = at::from_blob((void*)indBuf,
-                                                  {1, (long int)indCount},
-                                                  ptDatatypes.at(indDatatype));
-
-                  auto rawValues = at::from_blob((void*)valBuf,
-                                                 resultValueShape,
-                                                 ptDatatypes.at(valDatatype));
-
-                  auto indices = at::empty({1, (long int)indCount}, input._indices().options());
-
-                  auto values = at::empty(resultValueShape, input._values().options());
-
-                  indices.copy_(rawIndices);
-                  values.copy_(rawValues);
-
-                  auto resultTensor = at::_sparse_coo_tensor_unsafe(indices, values, input.sizes(), input.options());
-
-                  output.copy_(resultTensor);
+  work = collective<get_ccl_comms>(
+          pg,
+          tensors,
+          tensors,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allreduce_attr attr,
+              ccl::communicator& comm){
+              ccl::event ret_evt;
+              call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                  CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
+                                                     output.data_ptr(),
+                                                     (size_t) input.numel(),
+                                                     cclDatatypes.at(input.scalar_type()),
+                                                     cclOps.at(opts.reduceOp),
+                                                     comm,
+                                                     attr););
               });
-            attr.set<ccl::sparse_allreduce_attr_id::completion_fn>(static_cast<ccl::sparse_allreduce_completion_fn>(sparseAllreduceCompletionFn));
-            attr.set<ccl::sparse_allreduce_attr_id::fn_ctx>(static_cast<const void*>(cpu_cb_ptr.get()));
-            attr.set<ccl::sparse_allreduce_attr_id::coalesce_mode>(sparseCoalesceMode);
-
-
-          call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-            CCL_CHECK(ret_evt = ccl::preview::sparse_allreduce(indices.data_ptr(),
-                                                  (size_t)indices.numel(),
-                                                  values.data_ptr(),
-                                                  (size_t)values.numel(),
-                                                  nullptr, 0, nullptr, 0,
-                                                  cclDatatypes.at(indices.scalar_type()),
-                                                  cclDatatypes.at(values.scalar_type()),
-                                                  cclOps.at(opts.reduceOp),
-                                                  comm,
-                                                  attr););
+              return ret_evt;
           });
 
-          return std::make_tuple(std::move(ret_evt), cpu_cb_ptr);
-      });
-
-    work->debugName = std::string("cpu::sparse_allreduce");
-  }
+  work->debugName = std::string("cpu::allreduce");
 
   return work;
 }

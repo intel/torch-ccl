@@ -147,12 +147,6 @@ class Clean(clean):
         import glob
         import re
         try:
-            check_call(["git", "reset", "--hard"], cwd=CWD)
-        except Exception as e:
-            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-            print(e)
-            print("=" * 64)
-        try:
             check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
         except Exception as e:
             print("=" * 64 + "\nWARNNING!\n" + "=" * 64)

@@ -106,7 +106,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   int total_rank_size = pg_ccl.getSize() * devices.size();
   int local_base_rank = pg_ccl.getRank() * devices.size();
 
-  ccl::vector_class<ccl::pair_class<int, cl::sycl::device>> devs_rank;
+  ccl::vector_class<ccl::pair_class<int, ccl::device>> devs_rank;
   std::vector<ccl::stream> ccl_streams;
   ccl_streams.reserve(devices.size());
 
@@ -116,9 +116,9 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   ccl_streams.push_back(ccl::create_stream(q));
 
   int rank = local_base_rank;
-  devs_rank.emplace_back(rank, q.get_device());
+  devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
 
-  auto ctx = q.get_context();
+  auto ctx = ccl::create_context(q.get_context());
   auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
 
 

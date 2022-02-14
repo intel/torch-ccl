@@ -252,16 +252,15 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vector<
       RECORD_FUNCTION("torch_ccl::xpu::reduce", std::vector<c10::IValue>{input});
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::broadcast", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr<scalar_t>(),
-                                  output.data_ptr<scalar_t>(),
-                                  (size_t) input.numel(),
-                                  cclOps.at(opts.reduceOp),
-                                  root,
-                                  comm,
-                                  stream););
-        });
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
+                                output.data_ptr(),
+                                (size_t) input.numel(),
+                                cclDatatypes.at(input.scalar_type()),
+                                cclOps.at(opts.reduceOp),
+                                root,
+                                comm,
+                                stream););
       });
       return ret_evt;
 
@@ -326,29 +325,27 @@ std::shared_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::vect
       RECORD_FUNCTION("torch_ccl::xpu::allgather", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::allgather", [&] {
-        std::vector<size_t> recvCounts(outputs.size(), 0);
-        std::transform(outputs.begin(), outputs.end(), recvCounts.begin(),
-                       [](const at::Tensor& t) {
-                            return t.numel();
-                       });
+      std::vector<size_t> recvCounts(outputs.size(), 0);
+      std::transform(outputs.begin(), outputs.end(), recvCounts.begin(),
+                     [](const at::Tensor& t) {
+                          return t.numel();
+                     });
 
-        TORCH_CHECK((size_t)input.numel() == recvCounts[rank], "allgather: send and recv count doesn't match");
-        std::vector<scalar_t*> recvBufs(outputs.size(), nullptr);
-        std::transform(outputs.begin(), outputs.end(), recvBufs.begin(),
-                       [](const at::Tensor& t) {
-                          return t.data_ptr<scalar_t>();
-                       });
+      TORCH_CHECK((size_t)input.numel() == recvCounts[rank], "allgather: send and recv count doesn't match");
+      std::vector<void*> recvBufs(outputs.size(), nullptr);
+      std::transform(outputs.begin(), outputs.end(), recvBufs.begin(),
+                     [](const at::Tensor& t) {
+                        return t.data_ptr();
+                     });
 
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr<scalar_t>(),
-                                    (size_t) input.numel(),
-                                    recvBufs,
-                                    recvCounts,
-                                    comm,
-                                    stream););
-        });
-
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                  (size_t) input.numel(),
+                                  recvBufs,
+                                  recvCounts,
+                                  cclDatatypes.at(input.scalar_type()),
+                                  comm,
+                                  stream););
       });
 
       return ret_evt;

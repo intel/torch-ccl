@@ -1,16 +1,13 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index 72e1eda..2eb06f5 100644
+index abe7d962..d5474ed2 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -294,7 +294,10 @@ endif()
+@@ -276,6 +276,8 @@ endif()
+ # shared library
  add_library(ccl SHARED $<TARGET_OBJECTS:ccl-objects>)
  target_include_directories(ccl PUBLIC ${SRC_INCLUDE_DIRS})
- 
--target_link_libraries(ccl PUBLIC ${SRC_LINK_LIBS})
 +set(ONEAPI_IMPI_RPATH "'$ORIGIN'")
 +set_target_properties(ccl PROPERTIES LINK_FLAGS "-Wl,-rpath,${ONEAPI_IMPI_RPATH}")
-+
-+target_link_libraries(ccl PRIVATE ${SRC_LINK_LIBS})
+ target_link_libraries(ccl PRIVATE ${SRC_LINK_LIBS})
  
- if (NOT LIB_SO_VERSION AND NOT LIB_MAJOR_VERSION)
-     set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})
+ set_target_properties(ccl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CCL_BUILD_DIR})

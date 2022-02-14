@@ -286,7 +286,6 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             work.wait()
             self.assertEqual(expected_output, output)
 
-    @skip_test
     def test_allgather_basics(self):
         self._test_allgather_basics(lambda t: t.clone())
 

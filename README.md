@@ -17,6 +17,7 @@ We recommend Anaconda as Python package management system. The following is the 
    | ``torch`` | ``torch-ccl`` |  
    | :-----:| :---: |  
    |  ``master`` |  ``master``  |
+   | [v1.11.0](https://github.com/pytorch/pytorch/tree/v1.11.0) |  [ccl_torch1.11](https://github.com/intel/torch-ccl/tree/ccl_torch1.11)   |
    | [v1.10.0](https://github.com/pytorch/pytorch/tree/v1.10.0) |  [ccl_torch1.10](https://github.com/intel/torch-ccl/tree/ccl_torch1.10)   |
    | [v1.9.0](https://github.com/pytorch/pytorch/tree/v1.9.0) |  [ccl_torch1.9](https://github.com/intel/torch-ccl/tree/ccl_torch1.9)   |
    | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1) |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)   | 
@@ -30,9 +31,10 @@ The usage details can be found in the README of corresponding branch. The follow
 
 Python 3.6 or later and a C++17 compiler
 
-PyTorch v1.10.0
+PyTorch v1.11.0
 
 # Installation
+## Source install
 
 To install `torch-ccl`:
 
@@ -48,7 +50,17 @@ To install `torch-ccl`:
 ```bash
    python setup.py install
 ```
+## Wheel install 
+Wheel files are avaiable for the following Python versions.
 
+| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
+| :--: | :--: | :--: | :--: | :--: | :--: |
+| 1.11.0 | | ✔️ | ✔️ | ✔️ |✔️ |
+| 1.10.0 | ✔️ | ✔️ | ✔️ |✔️ |  |
+
+```python
+python -m pip install oneccl_bind_pt==1.11.0 -f https://software.intel.com/ipex-whl-stable
+```
 
 # Usage
 

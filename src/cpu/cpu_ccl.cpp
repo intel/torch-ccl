@@ -47,18 +47,6 @@ namespace torch_ccl
 
 namespace {
 
-// Type mapping
-
-std::map<ccl::datatype, at::ScalarType> ptDatatypes =
-  {
-    {ccl::datatype::uint8, at::kByte},
-    {ccl::datatype::int32, at::kInt},
-    {ccl::datatype::bfloat16, at::kBFloat16},
-    {ccl::datatype::float32, at::kFloat},
-    {ccl::datatype::float64, at::kDouble},
-    {ccl::datatype::int64, at::kLong}
-  };
-
 void checkSameSizeAndType(const at::Tensor& tensor,
                           const std::vector<at::Tensor>& tensors) __attribute__((unused));
 

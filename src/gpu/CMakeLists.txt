@@ -1,4 +1,4 @@
-find_package(Ipex REQUIRED)
+find_package(IntelExtensionPytorch REQUIRED)
 
 set(CCL_DPCPP_SRCS dpcpp_ccl.cpp)
 
@@ -16,7 +16,7 @@ target_link_libraries(torch_ccl_xpu PUBLIC ${ONECCL_LIBRARIES})
 target_link_libraries(torch_ccl_xpu PUBLIC ${TORCH_LIBRARIES})
 target_link_libraries(torch_ccl_xpu PUBLIC torch_ccl)
 target_link_libraries(torch_ccl_xpu PUBLIC torch_python)
-target_link_libraries(torch_ccl_xpu PUBLIC ipex)
+target_link_libraries(torch_ccl_xpu PUBLIC intel-ext-pt-gpu)
 
 set_target_properties(torch_ccl_xpu PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
 

@@ -3,10 +3,10 @@ import os
 import torch
 
 try:
-    import torch_ipex
+    import ipex
     xpu_is_avaliable = torch.xpu.is_available()
 except ImportError:
-    # ignore the torch_ipex
+    # ignore the ipex
     xpu_is_avaliable = False
     pass
 
@@ -146,7 +146,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_broadcast_basics_multi_xpu(self):
-        self._test_broadcast_basics(lambda t: t.clone().xpu(self.rank))
+        self._test_broadcast_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
 
     def _test_broadcast_stress(self, inputs):
@@ -169,7 +169,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_broadcast_stress(self):
         inputs = [torch.tensor([i * self.world_size + self.rank]) for i in range(1000)]
         self._test_broadcast_stress(inputs)
-    
+
     def _test_allreduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -182,7 +182,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             tensor = fn(input)
             work = pg.allreduce([tensor], opts)
             work.wait()
-            
+
             # TODO(#38095): Replace assertEqualIgnoreType. See issue #38095
             self.assertEqualIgnoreType(output, tensor)
 
@@ -195,12 +195,12 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_allreduce_basics_multi_xpu(self):
-        self._test_allreduce_basics(lambda t: t.clone().xpu(self.rank))
+        self._test_allreduce_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     def _test_reduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
-        
+
         for (op, input, output) in simple_reduce_tests(self.rank, self.world_size):
 
             for root in range(self.world_size):
@@ -227,7 +227,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_reduce_basics_multi_xpu(self):
-        self._test_reduce_basics(lambda t: t.clone().xpu(self.rank))
+        self._test_reduce_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     def _test_gather_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
@@ -263,7 +263,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_gather_basics_multi_xpu(self):
-        self._test_gather_basics(lambda t: t.clone().xpu(self.rank))
+        self._test_gather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     def _test_allgather_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
@@ -275,17 +275,16 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
             output = [
                 [
                     fn(torch.tensor([-1])) for _ in range(self.world_size)
-                ] 
+                ]
             ]
             expected_output = [
                 [
                     torch.tensor([i*n]) for i in range(self.world_size)
-                ] 
+                ]
             ]
             work = pg.allgather(output, input)
             work.wait()
             self.assertEqual(expected_output, output)
-
 
     def test_allgather_basics(self):
         self._test_allgather_basics(lambda t: t.clone())
@@ -296,7 +295,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_allgather_basics_multi_xpu(self):
-        self._test_allgather_basics(lambda t: t.clone().xpu(self.rank))
+        self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
 
     # alltoall_base
@@ -314,7 +313,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work = pg.alltoall_base(out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-   
+
     def _test_alltoall_base_unequal_split_helper(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
@@ -331,7 +330,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
              out_tensor, in_tensor, out_splits, in_splits)
         work.wait()
         self.assertEqual(out_tensor.cpu(), expected_tensor.cpu())
-        
+
     def test_allotall_equal_split_basics(self):
         self._test_alltoall_base_equal_split_helper(lambda t: t.clone())
 
@@ -341,7 +340,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_allotall_equal_split_basics_multi_xpu(self):
-        self._test_alltoall_base_equal_split_helper(lambda t: t.clone().xpu(self.rank))
+        self._test_alltoall_base_equal_split_helper(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     def test_allotall_unequal_split_basics(self):
         self._test_alltoall_base_unequal_split_helper(lambda t: t.clone())
@@ -352,7 +351,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_allotall_unequal_split_basics_multi_xpu(self):
-        self._test_alltoall_base_unequal_split_helper(lambda t: t.clone().xpu(self.rank))
+        self._test_alltoall_base_unequal_split_helper(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     #alltoall
     def _test_all_to_all_helper(self, fn):
@@ -376,7 +375,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         work.wait()
         for t1, t2 in zip(out_tensors, expected_tensors):
             self.assertEqual(t1.cpu(), t2.cpu())
-        
+
     def test_alltoall_basics(self):
         self._test_all_to_all_helper(lambda t: t.clone())
 
@@ -386,7 +385,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
 
     @skip_if_not_multixpu
     def test_alltoall_basics_multi_xpu(self):
-        self._test_all_to_all_helper(lambda t: t.clone().xpu(self.rank))
+        self._test_all_to_all_helper(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
 
 if __name__ == '__main__':

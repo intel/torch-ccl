@@ -75,24 +75,36 @@ class ProcessGroupCCL : public ProcessGroup
 public:
   class AsyncWorkCCL : public ProcessGroup::Work {
   public:
-    AsyncWorkCCL() : Work() {};
+    AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
+                 int rank = -1,
+                 c10d::OpType opType = OpType::UNKNOWN,
+                 const char* profilingTitle = nullptr,
+                 const c10::optional<std::vector<at::Tensor>>& inputTensors = c10::nullopt);
 
     virtual void run() = 0;
-    virtual void finishAsyncWorkCCL(){};
-    virtual void finishAsyncWorkCCLError(std::exception_ptr eptr){};
-    //virtual c10::intrusive_ptr<c10::ivalue::Future> getFuture() = 0;
-  public:
 
-    std::string debugName;
+    c10::intrusive_ptr<c10::ivalue::Future> getFuture() override;
 
+    std::vector<at::Tensor> result() override;
 
+    void finishAsyncWorkCCL();
+
+    void finishAsyncWorkCCLError(std::exception_ptr eptr);
+
+  protected:
     friend class ProcessGroupCCL;
+
+  public:
+    std::string debugName;
+    const std::vector<std::vector<at::Tensor>> outputTensors_;
+    // The future returned by getFuture.
+    c10::intrusive_ptr<at::ivalue::Future> future_;
   };
 
   explicit ProcessGroupCCL(const c10::intrusive_ptr<Store>& store,
                            int rank,
                            int size,
-                           const std::chrono::duration<float>& op_time_out);
+                           std::chrono::milliseconds);
   virtual ~ProcessGroupCCL();
 
   const std::string getBackendName() const override {
@@ -180,8 +192,7 @@ public:
       const c10::intrusive_ptr<Store>& store,
       int rank = -1,
       int size = -1,
-      const std::chrono::duration<float>& op_time_out =
-      std::chrono::milliseconds(OP_TIMEOUT_MILLIS));
+      std::chrono::milliseconds op_time_out = kNoTimeout);
   static const int64_t OP_TIMEOUT_MILLIS;
  public:
 
@@ -190,7 +201,8 @@ public:
 
   // Store that is used to exchange information between processes.
   c10::intrusive_ptr<Store> store_;
-  std::chrono::duration<float> op_timeout_millis;
+
+  std::chrono::milliseconds timeout;
 
   std::unique_ptr<torch_ccl::CCLCommCollector> ccl_member_;
 

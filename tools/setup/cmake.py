@@ -194,7 +194,11 @@ class CMakeExtension(Extension):
 
         for var, val in env.items():
             if var.startswith(('BUILD_', 'USE_', 'CMAKE_')):
-                build_options[var] = val
+                # TODO: DO NOT OVERWRITE CMAKE_PREFIX_PATH
+                if var.strip() == "CMAKE_PREFIX_PATH":
+                    build_options[var] += ";" + val
+                else:
+                    build_options[var] = val
 
         if 'CMAKE_BUILD_TYPE' not in env:
             if check_env_flag('DEBUG', env=env):

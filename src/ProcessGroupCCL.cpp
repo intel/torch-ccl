@@ -59,6 +59,73 @@ void checkRank(int rank, int size)
 
 } // namespace
 
+
+c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
+        const std::vector<std::vector<at::Tensor>>& outputTensors) {
+  if (outputTensors.size() > 1) {
+    return c10::make_intrusive<c10::ivalue::Future>(
+            c10::ListType::create(c10::ListType::create(c10::TensorType::get())));
+  }
+  return c10::make_intrusive<c10::ivalue::Future>(
+          c10::ListType::create(c10::TensorType::get()));
+}
+
+void returnFutureWithOutput(
+        c10::intrusive_ptr<c10::ivalue::Future>& future,
+        const std::vector<std::vector<at::Tensor>>& outputTensors) {
+  if (outputTensors.size() == 0) {
+    future->markCompleted(c10::IValue(std::vector<at::Tensor>()));
+    return;
+  }
+  if (outputTensors.size() > 1) {
+    future->markCompleted(c10::IValue(outputTensors));
+    return;
+  }
+  future->markCompleted(c10::IValue(outputTensors[0]));
+}
+
+ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
+                                            int rank,
+                                            c10d::OpType opType,
+                                            const char* profilingTitle,
+                                            const c10::optional<std::vector<at::Tensor>>& inputTensors)
+// Profiler: Pass nullptr as profilingTitle to parent constructor to
+// replace default profiler implementation with async version that reports
+// correct timestamps for work that is asynchronously executed.
+        : ProcessGroup::Work(rank, opType, profilingTitle, inputTensors),
+          outputTensors_(std::move(outputTensors)),
+          future_(createFutureAsOutput(outputTensors)) {
+//  if (profilingTitle != nullptr) {
+//    recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
+//  }
+}
+
+c10::intrusive_ptr<c10::ivalue::Future> ProcessGroupCCL::AsyncWorkCCL::getFuture() {
+  return future_;
+}
+
+std::vector<at::Tensor> ProcessGroupCCL::AsyncWorkCCL::result() {
+  TORCH_CHECK(
+          isCompleted(),
+          "Work needs to be completed before calling result(). "
+          "Should call wait() before result().");
+  TORCH_CHECK(
+          outputTensors_.size() <= 1,
+          "work result does not support list of lists, use .getFuture() and value()");
+  return outputTensors_.size() == 0 ? std::vector<at::Tensor>()
+                                    : outputTensors_.at(0);
+}
+
+void ProcessGroupCCL::AsyncWorkCCL::finishAsyncWorkCCLError(std::exception_ptr eptr) {
+  future_->setError(eptr);
+  finish(eptr);
+}
+
+void ProcessGroupCCL::AsyncWorkCCL::finishAsyncWorkCCL() {
+  returnFutureWithOutput(future_, outputTensors_);
+  finish();
+}
+
 const int64_t ProcessGroupCCL::OP_TIMEOUT_MILLIS = 10 * 1000;
 std::mutex ProcessGroupCCL::globalMutex;
 
@@ -82,13 +149,13 @@ c10::intrusive_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
     const c10::intrusive_ptr<Store>& store,
     int rank,
     int size,
-    const std::chrono::duration<float>& op_time_out)
+    std::chrono::milliseconds op_time_out)
 {
   return c10::make_intrusive<ProcessGroupCCL>(store, rank, size, op_time_out);
 }
 
-ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int rank, int size, const std::chrono::duration<float>& op_time_out)
-    : ProcessGroup(rank, size), store_(store), op_timeout_millis(op_time_out),
+ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int rank, int size, std::chrono::milliseconds op_time_out)
+    : ProcessGroup(rank, size), store_(store), timeout(op_time_out),
       ccl_member_(std::make_unique<torch_ccl::CCLCommCollector>())
 {
 #ifdef NDEBUG

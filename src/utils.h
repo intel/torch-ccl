@@ -32,11 +32,15 @@
 #pragma once
 
 #include <unistd.h>
+#include <thread>
 #include <ATen/detail/FunctionTraits.h>
 #include <ATen/record_function.h>
 #include <c10d/Types.hpp>
 #include <ccl_comm_collector.h>
 #include "ProcessGroupCCL.hpp"
+
+
+constexpr int64_t kSynchronizeBusyWaitMillis = 10;
 
 #define CCL_CHECK(cmd)                                               \
   do {                                                               \
@@ -87,7 +91,7 @@ decltype(auto) call_with_lock(std::mutex& lock, ccl_fn_type fn) {
 
 class AsyncBarrierWork: public ProcessGroupCCL::AsyncWorkCCL {
 public:
-  AsyncBarrierWork(){}
+  AsyncBarrierWork():AsyncWorkCCL({}){}
 
    ~AsyncBarrierWork()
   {
@@ -159,75 +163,129 @@ template <typename> struct is_tuple: std::false_type {};
 
 template <typename ...T> struct is_tuple<std::tuple<T...>>: std::true_type {};
 
+template <typename> struct is_vector: std::false_type {};
+
+template <typename T> struct is_vector<std::vector<T>>: std::true_type {};
+
 template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
-class AsyncWorkCCLWrap : public ProcessGroupCCL::AsyncWorkCCL {
+class CollectiveAsyncWorkCCL : public ProcessGroupCCL::AsyncWorkCCL {
 public:
   using traits = function_traits<RunF>;
   static constexpr int num_params = traits::arity;
   using ret_t = typename traits::result_type;
 
-  AsyncWorkCCLWrap(const std::vector<InputType>& inputs,
+  template<typename T = OutputType>
+  CollectiveAsyncWorkCCL(const std::vector<InputType>& inputs,
                    const std::vector<OutputType>& outputs,
                    const RunF f,
                    CommType& comms,
-                   attr_t& attr) : AsyncWorkCCL(), f(f), comms(comms), attr(attr), inputs(inputs), outputs(outputs) {
-    future_ = createFutureAsOutput(this->outputs);
-  }
+                   attr_t& attr,
+                   std::chrono::milliseconds timeout,
+                   int rank,
+                   c10d::OpType opType,
+                   const char* profilingTitle,
+                   const c10::optional<std::vector<at::Tensor>>& inputTensors,
+                   typename std::enable_if<is_vector<T>::value, int>::type* = 0) :
+                   AsyncWorkCCL(outputs, rank, opType, profilingTitle, inputTensors),
+                   f(f), comms(comms), attr(attr), inputs(inputs), opTimeout_(timeout) {}
+
+  template<typename T = OutputType>
+  CollectiveAsyncWorkCCL(const std::vector<InputType>& inputs,
+                         const std::vector<OutputType>& outputs,
+                         const RunF f,
+                         CommType& comms,
+                         attr_t& attr,
+                         std::chrono::milliseconds timeout,
+                         int rank,
+                         c10d::OpType opType,
+                         const char* profilingTitle,
+                         const c10::optional<std::vector<at::Tensor>>& inputTensors,
+                         typename std::enable_if<!is_vector<T>::value, int>::type* = 0) :
+                         AsyncWorkCCL({outputs}, rank, opType, profilingTitle, inputTensors),
+                         f(f), comms(comms), attr(attr), inputs(inputs), opTimeout_(timeout) {}
 
   void run() override {
     using Indices = std::make_index_sequence<num_params - 4>;
-      run_wrap_(Indices{});
+    workStartTime_ = std::chrono::steady_clock::now();
+    run_wrap_(Indices{});
   };
 
-  ~AsyncWorkCCLWrap()
+  virtual ~CollectiveAsyncWorkCCL()
   {
     if (!rets.empty()) {
       std::cerr << "attempted destruction of WorkCCL before work has completed, "
                 << "waiting the request."
                 << std::endl;
-      wait(std::chrono::milliseconds(0));
+      synchronize();
     }
   }
 
-  bool isSuccess() const override
-  {
-    throw std::runtime_error("invalid call to ::isSuccess.");
-  }
-
-  c10::intrusive_ptr<c10::ivalue::Future> getFuture() {
-    return future_;
-  }
-
-  void finishAsyncWorkCCL() {
-    std::vector<c10::IValue> tensor_param;
-    format_tensors_param(tensor_param, inputs);
-    format_tensors_param(tensor_param, outputs);
-
-    RECORD_FUNCTION(std::string("torch_ccl::wait::") + debugName, tensor_param);
+  bool isCompleted() override {
     for(auto& ret : rets) {
-      ccl::event& evt = _get_event_from_ret<ret_t>(ret);
+      bool flag;
+      ccl::event& req = get_event_from_ret_<ret_t>(ret);
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(evt.wait());
+          CCL_CHECK(flag = req.test());
       });
+      if (!flag) {
+        return false;
+      }
     }
-    rets.clear();
-    // Always return true, because abort API is not implemented.
-    //     return true;
-    //
-    future_->markCompleted(at::IValue(outputs));
-    finish();
+    return true;
   }
 
-  void finishAsyncWorkCCLError(std::exception_ptr eptr) override {
-    future_->setError(eptr);
-    finish();
+  bool timedOut(std::chrono::milliseconds timeout) const {
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    return (
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                    currentTimepoint - workStartTime_) >= timeout);
   }
 
-private:
+  void synchronizeInternal(std::chrono::milliseconds timeout) {
+    // Wait for the operation to complete.
+    std::chrono::milliseconds workTimeout =
+            timeout == kNoTimeout ? this->opTimeout_ : timeout;
+    while (!isCompleted()) {
+      if (timedOut(workTimeout)) {
 
-  template <std::size_t...INDEX>
-  void run_wrap_(std::index_sequence<INDEX...>) {
+        auto currentTimepoint = std::chrono::steady_clock::now();
+        auto timeElapsed =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                        currentTimepoint - workStartTime_);
+        std::string exceptionMsg = c10::str(
+                "[Rank ",
+                rank_,
+                "] ",
+                "Caught collective operation timeout: ",
+//                (*this),
+                " ran for ",
+                timeElapsed.count(),
+                " milliseconds before timing out.");
+        TORCH_CHECK(false, exceptionMsg);
+      }
+      // Check for errors and throw appropriate exception.
+//      checkAndThrowException();
+      std::this_thread::sleep_for(
+              std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
+    }
+
+    this->rets.clear();
+  }
+
+  void synchronize() override {
+    synchronizeInternal(kNoTimeout);
+  }
+
+protected:
+  std::vector<ccl::event>& get_ccl_event()
+  {
+    return cclEvents_;
+  }
+
+  template <typename T = OutputType, std::size_t...INDEX>
+  typename std::enable_if<is_vector<T>::value, void>::type run_wrap_(std::index_sequence<INDEX...>) {
     if (rets.empty()) {
+      auto& outputs = outputTensors_;
       for (size_t i = 0; i < inputs.size(); i++) {
         CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i + INDEX]...)));
       }
@@ -237,27 +295,27 @@ private:
     }
   }
 
-  template<typename T, std::enable_if_t<!std::is_same<T, at::Tensor>::value, bool> = true>
-  std::vector<at::Tensor> result_wrap_()
-  {
-    AT_ERROR("NOT implemented for the non std::vector<at::Tensor> return");
-  }
-
-  template<typename T, std::enable_if_t<std::is_same<T, at::Tensor>::value, bool> = true>
-  std::vector<at::Tensor> result_wrap_()
-  {
-    TORCH_CHECK(outputs.size() == 1, "unexpected result size");
-    return outputs;
+  template <typename T = OutputType, std::size_t...INDEX>
+  typename std::enable_if<!is_vector<T>::value, void>::type run_wrap_(std::index_sequence<INDEX...>) {
+    if (rets.empty()) {
+      auto& outputs = outputTensors_[0];
+      for (size_t i = 0; i < inputs.size(); i++) {
+        CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i + INDEX]...)));
+      }
+    }
+    else {
+      // add warning for re run the ccl work
+    }
   }
 
   template <typename R, std::enable_if_t<is_tuple<R>::value, bool> = true>
-  ccl::event& _get_event_from_ret(R& ret)
+  ccl::event& get_event_from_ret_(R& ret)
   {
       return std::get<0>(ret);
   }
 
   template <typename R, std::enable_if_t<std::is_same<R, ccl::event>::value, bool> = true>
-  ccl::event& _get_event_from_ret(R& ret)
+  ccl::event& get_event_from_ret_(R& ret)
   {
     return ret;
   }
@@ -265,37 +323,44 @@ private:
   RunF f;
   CommType& comms;
   attr_t attr;
-  /*
-      keep copy of tensors to increment tensor reference counters
-      while CCL operation is in progress
-  */
+  // Keep the reference to the tensor.
   std::vector<InputType> inputs;
-  std::vector<OutputType> outputs;
+  std::chrono::milliseconds opTimeout_;
+  // Keep the reference to the returned value. E.G: the callback functor.
   std::vector<ret_t> rets;
-  // The future returned by getFuture.
-  c10::intrusive_ptr<at::ivalue::Future> future_;
+  std::vector<ccl::event> cclEvents_;
+  std::chrono::time_point<std::chrono::steady_clock> workStartTime_;
 };
 
-template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
+template <template<typename, typename, typename, typename, typename> class WorkCCL,
+          typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> make_work_ccl(const std::vector<InputType>& inputs,
-                                                             const std::vector<OutputType>& outputs,
-                                                             RunF f,
-                                                             CommType& comms,
-                                                             attr_t& attr) {
-  c10::intrusive_ptr<AsyncWorkCCLWrap<RunF, CommType, InputType, OutputType, attr_t>> ret_ptr =
-          c10::make_intrusive<AsyncWorkCCLWrap<RunF, CommType, InputType, OutputType, attr_t>>(inputs, outputs, f, comms, attr);
+                                                                const std::vector<OutputType>& outputs,
+                                                                RunF f,
+                                                                CommType& comms,
+                                                                attr_t& attr,
+                                                                std::chrono::milliseconds timeout,
+                                                                int rank,
+                                                                c10d::OpType op_type,
+                                                                const char* prof_title) {
+  c10::intrusive_ptr<WorkCCL<RunF, CommType, InputType, OutputType, attr_t>> ret_ptr =
+      c10::make_intrusive<WorkCCL<RunF, CommType, InputType, OutputType, attr_t>>(inputs, outputs, f, comms, attr, timeout,
+              rank, op_type, prof_title, c10::nullopt);
   return ret_ptr;
 }
 
 template <Comms& (*get_ccl_fn)(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices),
-          typename fn, typename pre_process, typename post_process, typename input_t, typename output_t>
+        template<typename, typename, typename, typename, typename> class WorkCCL,
+        typename fn, typename pre_process, typename post_process, typename input_t, typename output_t>
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   ProcessGroupCCL& pg_ccl,
   std::vector<input_t>& inputs,
   std::vector<output_t>& outputs,
   fn fun,
   pre_process pre,
-  post_process post) {
+  post_process post,
+  c10d::OpType op_type,
+  const char* prof_title) {
   using traits = function_traits<fn>;
   using attr_t = typename traits::template arg<2>::type;
   attr_t attr = ccl::create_operation_attr<attr_t>();
@@ -305,25 +370,29 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   auto& comms = get_ccl_fn(pg_ccl, key, devices);
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = make_work_ccl(inputs, outputs, fun, comms, attr);
+  work = make_work_ccl<WorkCCL>(inputs, outputs, fun, comms, attr, pg_ccl.timeout, pg_ccl.getRank(), op_type, prof_title);
 
   return work;
 }
 
 template <Comms& (*get_ccl_fn)(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices),
-          typename fn, typename input_t, typename output_t>
+        template<typename, typename, typename, typename, typename> class WorkCCL, typename fn, typename input_t, typename output_t>
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   ProcessGroupCCL& pg_ccl,
   std::vector<input_t>& inputs,
   std::vector<output_t>& outputs,
-  fn fun) {
-  return collective<get_ccl_fn>(
+  fn fun,
+  c10d::OpType op_type,
+  const char* prof_title) {
+  return collective<get_ccl_fn, WorkCCL>(
     pg_ccl,
     inputs,
     outputs,
     fun,
     [](std::vector<ccl::stream>&) {},
-    [](std::vector<ccl::stream>&) {});
+    [](std::vector<ccl::stream>&) {},
+    op_type,
+    prof_title);
 }
 
 typedef struct

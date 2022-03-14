@@ -4,7 +4,7 @@ import warnings
 import torch
 
 cwd = os.path.dirname(os.path.abspath(__file__))
-
+os.environ['CCL_ROOT'] = cwd
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
 os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
 if not os.path.exists(os.path.join(cwd, "version.py")):
@@ -15,12 +15,12 @@ from . import _C as ccl_lib
 
 if hasattr(torch, 'xpu'):
     if torch.xpu.is_available():
-        # try:
-        # load the CCL/XPU library
-        import ctypes
-        my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/libtorch_ccl_xpu.so"))
-        # except OSError:
-        #     print("Cannot load xpu CCL. CCL doesn't work for XPU device")
+        try:
+            # load the CCL/XPU library
+            import ctypes
+            my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/libtorch_ccl_xpu.so"))
+        except OSError:
+            print("Warning: Cannot load xpu CCL. CCL doesn't work for XPU device")
 
 __all__ = []
 __all__ += [name for name in dir(ccl_lib)

@@ -130,7 +130,7 @@ TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
     py::init([](const c10::intrusive_ptr<::c10d::Store>& store,
                 int rank,
                 int size,
-                std::chrono::duration<float> timeout) {
+                std::chrono::milliseconds timeout) {
       return c10::make_intrusive<::c10d::ProcessGroupCCL>(store, rank, size, timeout);
     }),
     py::arg("store"),

@@ -76,7 +76,6 @@ class BuildCMakeExt(BuildExtension):
                 pass
             self.build_cmake(ext)
 
-
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
         super(BuildCMakeExt, self).run()
         build_py = self.get_finalized_command('build_py')
@@ -113,12 +112,11 @@ class BuildCMakeExt(BuildExtension):
 
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                from torch_ipex import cmake_prefix_path as ipex_cmake_prefix_path
-                build_options['CMAKE_PREFIX_PATH'] = \
-                    CMakeExtension.convert_cmake_dirs([torch.utils.cmake_prefix_path, ipex_cmake_prefix_path])
+                import ipex
+                build_options['CMAKE_PREFIX_PATH'] += ";" + ipex.cmake_prefix_path
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc
@@ -129,7 +127,7 @@ class BuildCMakeExt(BuildExtension):
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 check_call(['make', 'torch_ccl_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
@@ -138,6 +136,13 @@ class Clean(clean):
     def run(self):
         import glob
         import re
+        try:
+            check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
+        except Exception as e:
+            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+            print(e)
+            print("=" * 64)
+
         with open('.gitignore', 'r') as f:
             ignores = f.read()
             pat = re.compile(r'^#( BEGIN NOT-CLEAN-FILES )?')
@@ -228,6 +233,7 @@ if __name__ == '__main__':
                 'include/*.h*',
                 'lib/lib*',
                 'lib/prov/lib*',
+                'lib/kernels/*',
                 'licensing/*',
                 'modulefiles/*',
             ]},

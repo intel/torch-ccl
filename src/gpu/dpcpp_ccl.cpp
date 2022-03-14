@@ -32,9 +32,7 @@
 #include <ATen/record_function.h>
 #include <ProcessGroupCCL.hpp>
 #include <dispatch_stub.h>
-#include <aten/core/Device.h>
-#include <aten/core/Stream.h>
-#include <runtime/Context.h>
+#include <ipex.h>
 
 namespace torch_ccl
 {
@@ -104,36 +102,81 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     return *cached_comms;
   }
 
-  // Create the gpu communicators
   // Only support the symmetric distributed communication
   int total_rank_size = pg_ccl.getSize() * devices.size();
   int local_base_rank = pg_ccl.getRank() * devices.size();
-  ccl::vector_class<ccl::pair_class<int, cl::sycl::device>> devs_rank;
-  for (size_t i = 0; i < devices.size(); ++i) {
-    int rank = local_base_rank + i;
-    auto sycl_dev = xpu::dpcpp::dpcppGetRawDevice(devices[i].index());
-    devs_rank.emplace_back(rank, sycl_dev);
-  }
 
-  auto ctx = xpu::dpcpp::getDeviceContext(devices[0].index());
-  auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
-
-  // Create the gpu streams
+  ccl::vector_class<ccl::pair_class<int, ccl::device>> devs_rank;
   std::vector<ccl::stream> ccl_streams;
   ccl_streams.reserve(devices.size());
-  for(size_t i = 0; i < devices.size(); ++i)
-  {
-    // Use the same queue for computation and communication.
-    // TODO: IPEX doesn't support multiple queue for now. Copy engine requires a dedicate queue
-    auto q = xpu::dpcpp::getCurrentDPCPPStream(devices[i].index()).dpcpp_queue();
-    ccl_streams.push_back(ccl::create_stream(q));
-  }
+
+  // Use the same queue for computation and communication.
+  // TODO: IPEX doesn't support multiple queue for now. Copy engine requires a dedicate queue
+  auto q = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index()).dpcpp_queue();
+  ccl_streams.push_back(ccl::create_stream(q));
+
+  int rank = local_base_rank;
+  devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+
+  auto ctx = ccl::create_context(q.get_context());
+  auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
+
 
   std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams);
   // Store the comms to cache
   pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);
 
   return *dpcpp_comms_ptr.get();
+}
+
+template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
+class XPUWorkCCL : public CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t> {
+public:
+  XPUWorkCCL(const std::vector<InputType>& inputs,
+             const std::vector<OutputType>& outputs,
+             const RunF f,
+             CommType& comms,
+             attr_t& attr,
+             std::chrono::milliseconds timeout,
+             int rank,
+             c10d::OpType opType,
+             const char* profilingTitle,
+             const c10::optional<std::vector<at::Tensor>>& inputTensors) :
+             CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
+                     inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
+
+  void run() override {
+    CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>::run();
+    // add SYCL running dependency communication -> computation.
+  };
+
+  // No explicitly synchronization.
+  virtual ~XPUWorkCCL() {
+    this->rets.clear();
+  }
+
+  // Waiting on the work's on XPU backend
+  bool wait(std::chrono::milliseconds timeout) override {
+    this->synchronizeInternal(timeout);
+    return true;
+  }
+
+private:
+
+};
+
+void execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work) {
+//  if(work->recordFunctionBeforeCallback_){
+//    work->recordFunctionBeforeCallback_();
+//  }
+  try {
+    work->run();
+  } catch (...) {
+    work->finishAsyncWorkCCLError(std::current_exception());
+    return;
+  }
+
+  work->finishAsyncWorkCCL();
 }
 
 } //namespace anonymous
@@ -211,28 +254,35 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
                                                                        ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::allreduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
       RECORD_FUNCTION("torch_ccl::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::allreduce", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr<scalar_t>(), output.data_ptr<scalar_t>(),
-                                                  (size_t)input.numel(), cclOps.at(opts.reduceOp), comm, stream, attr););
-        });
-    });
-    return ret_evt;
-  });
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
+                                             output.data_ptr(),
+                                             (size_t) input.numel(),
+                                             cclDatatypes.at(input.scalar_type()),
+                                             cclOps.at(opts.reduceOp),
+                                             comm,
+                                             stream,
+                                             attr););
+      });
+      return ret_evt;
+  },
+  c10d::OpType::ALLREDUCE,
+  "torch_ccl::xpu_work::allreduce");
 
   work->debugName = std::string("xpu::allreduce");
+  execute(work);
 
   return work;
 }
@@ -243,34 +293,36 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
   checkGPUTensor(tensors);
   const int root = opts.rootRank * tensors.size() + opts.rootTensor;
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::reduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
       RECORD_FUNCTION("torch_ccl::xpu::reduce", std::vector<c10::IValue>{input});
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::broadcast", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr<scalar_t>(),
-                                  output.data_ptr<scalar_t>(),
-                                  (size_t) input.numel(),
-                                  cclOps.at(opts.reduceOp),
-                                  root,
-                                  comm,
-                                  stream););
-        });
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
+                                output.data_ptr(),
+                                (size_t) input.numel(),
+                                cclDatatypes.at(input.scalar_type()),
+                                cclOps.at(opts.reduceOp),
+                                root,
+                                comm,
+                                stream););
       });
       return ret_evt;
 
-  });
+  },
+    c10d::OpType::REDUCE,
+    "torch_ccl::xpu_work::reduce");
 
   work->debugName = std::string("xpu::reduce");
+  execute(work);
 
   return work;
 }
@@ -281,28 +333,35 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
   checkGPUTensor(tensors);
   const int root = opts.rootRank * tensors.size() + opts.rootTensor;
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
     tensors,
-    [=](at::Tensor& input,
-        at::Tensor& output,
+    [=](at::Tensor input,
+        at::Tensor output,
         ccl::broadcast_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
       RECORD_FUNCTION("torch_ccl::xpu::broadcast", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::broadcast", [&] {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr<scalar_t>(), (size_t)input.numel(), root,
-                                   comm, stream, attr););
-        });
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr(),
+                                             (size_t) input.numel(),
+                                             cclDatatypes.at(input.scalar_type()),
+                                             root,
+                                             comm,
+                                             stream,
+                                             attr));
       });
       return ret_evt;
-    });
+    },
+    c10d::OpType::BROADCAST,
+    "torch_ccl::xpu_work::broadcast");
+
 
   work->debugName = std::string("xpu::broadcast");
+  execute(work);
 
   return work;
 }
@@ -314,47 +373,48 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
                                                                        ProcessGroupCCL& pg_ccl) {
   const int rank = pg_ccl.getRank();
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     inputTensors,
     outputTensors,
     [=](at::Tensor input,
-        std::vector<at::Tensor>& outputs,
+        const std::vector<at::Tensor>& outputs,
         ccl::allgatherv_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
       RECORD_FUNCTION("torch_ccl::xpu::allgather", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "torch_ccl::xpu::allgather", [&] {
-        std::vector<size_t> recvCounts(outputs.size(), 0);
-        std::transform(outputs.begin(), outputs.end(), recvCounts.begin(),
-                       [](const at::Tensor& t) {
-                            return t.numel();
-                       });
+      std::vector<size_t> recvCounts(outputs.size(), 0);
+      std::transform(outputs.begin(), outputs.end(), recvCounts.begin(),
+                     [](const at::Tensor& t) {
+                          return t.numel();
+                     });
 
-        TORCH_CHECK((size_t)input.numel() == recvCounts[rank], "allgather: send and recv count doesn't match");
-        std::vector<scalar_t*> recvBufs(outputs.size(), nullptr);
-        std::transform(outputs.begin(), outputs.end(), recvBufs.begin(),
-                       [](const at::Tensor& t) {
-                          return t.data_ptr<scalar_t>();
-                       });
+      TORCH_CHECK((size_t)input.numel() == recvCounts[rank], "allgather: send and recv count doesn't match");
+      std::vector<void*> recvBufs(outputs.size(), nullptr);
+      std::transform(outputs.begin(), outputs.end(), recvBufs.begin(),
+                     [](const at::Tensor& t) {
+                        return t.data_ptr();
+                     });
 
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr<scalar_t>(),
-                                    (size_t) input.numel(),
-                                    recvBufs,
-                                    recvCounts,
-                                    comm,
-                                    stream););
-        });
-
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                  (size_t) input.numel(),
+                                  recvBufs,
+                                  recvCounts,
+                                  cclDatatypes.at(input.scalar_type()),
+                                  comm,
+                                  stream););
       });
 
       return ret_evt;
-    });
+    },
+    c10d::OpType::ALLGATHER,
+    "torch_ccl::xpu_work::allgather");
 
   work->debugName = std::string("xpu::allgather");
+  execute(work);
 
   return work;
 }
@@ -384,12 +444,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
                 "gather: number of output tensors should equal "
                 "to the world size");
   }
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
           pg,
           inputTensors,
           outputTensors,
           [=](at::Tensor input,
-              std::vector<at::Tensor>& outputs,
+              const std::vector<at::Tensor>& outputs,
               ccl::alltoallv_attr attr,
               ccl::communicator& comm,
               ccl::stream& stream) {
@@ -448,9 +508,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
               }
 
               return ret_evt;
-          });
+          },
+          c10d::OpType::GATHER,
+          "torch_ccl::xpu_work::gather");
 
   work->debugName = std::string("xpu::gather");
+  execute(work);
 
   return work;
 }
@@ -475,7 +538,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
 
     TORCH_CHECK(outputTensor.size(0) % grp_size == 0,
                 "alltoall_base: tensor's dim 0 does not divide equally across group size");
-    work = collective<get_ccl_comms>(
+    work = collective<get_ccl_comms, XPUWorkCCL>(
             pg,
             inputs,
             outputs,
@@ -498,11 +561,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 });
 
                 return ret_evt;
-            });
+            },
+            c10d::OpType::ALLTOALL_BASE,
+            "torch_ccl::xpu_work::alltoall_base");
   }
   else{
     // Need alltoallv
-    work = collective<get_ccl_comms>(
+    work = collective<get_ccl_comms, XPUWorkCCL>(
             pg,
             inputs,
             outputs,
@@ -544,10 +609,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                     });
                 });
                 return ret_evt;
-            });
+            },
+            c10d::OpType::ALLTOALL_BASE,
+            "torch_ccl::xpu_work::alltoall_base");
   }
 
   work->debugName = std::string("xpu::alltoall_base");
+  execute(work);
 
   return work;
 }
@@ -561,7 +629,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
 
   std::vector<std::vector<at::Tensor>> outputTensors_list = {outputTensors};
   std::vector<std::vector<at::Tensor>> inputTensors_list = {inputTensors};
-  work = collective<get_ccl_comms>(
+  work = collective<get_ccl_comms, XPUWorkCCL>(
           pg,
           inputTensors_list,
           outputTensors_list,
@@ -624,9 +692,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
                 }
               }
               return ret_evt;
-          });
+          },
+          c10d::OpType::ALLTOALL,
+          "torch_ccl::xpu_work::alltoall");
 
   work->debugName = std::string("xpu::alltoall");
+  execute(work);
 
   return work;
 }

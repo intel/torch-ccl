@@ -183,16 +183,4 @@ void checkSameType(const at::Tensor& tensor,
   }
 }
 
-c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
-        const std::vector<std::vector<at::Tensor>>& outputTensors) {
-    return c10::make_intrusive<c10::ivalue::Future>(
-            c10::ListType::create(c10::ListType::create(c10::TensorType::get())));
-}
-
-c10::intrusive_ptr<c10::ivalue::Future> createFutureAsOutput(
-        const std::vector<at::Tensor>& outputTensors) {
-  return c10::make_intrusive<c10::ivalue::Future>(
-          c10::ListType::create(c10::TensorType::get()));
-}
-
 }

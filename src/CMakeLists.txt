@@ -8,12 +8,12 @@ target_compile_options(torch_ccl PUBLIC -Wall
         -Wno-sign-compare
         -Wno-unused-function)
 
-if(COMPUTE_BACKEND STREQUAL "dpcpp")
+if(COMPUTE_BACKEND STREQUAL "dpcpp_level_zero")
     target_compile_options(torch_ccl PUBLIC -fsycl)
     add_subdirectory(./gpu)
 endif()
 
-target_include_directories(torch_ccl PUBLIC ${ONECCL_INCLUDE_DIR} ${TORCH_INCLUDE_DIRS} ${IPEX_INCLUDE_DIRS} ./)
+target_include_directories(torch_ccl PUBLIC ${ONECCL_INCLUDE_DIR} ${TORCH_INCLUDE_DIRS} ./)
 
 
 target_link_libraries(torch_ccl PUBLIC ${DEPENDS_LIB})

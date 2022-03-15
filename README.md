@@ -53,9 +53,10 @@ To install `torch-ccl`:
 ## Wheel install 
 Wheel files are avaiable for the following Python versions.
 
-| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 |
-| :--: | :--: | :--: | :--: | :--: |
-| 1.11.0 | ✔️ | ✔️ | ✔️ | ✔️ |
+| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
+| :--: | :--: | :--: | :--: | :--: | :--: |
+| 1.11.0 | | ✔️ | ✔️ | ✔️ |✔️ |
+| 1.10.0 | ✔️ | ✔️ | ✔️ |✔️ |  |
 
 ```python
 python -m pip install oneccl_bind_pt==1.11.0 -f https://software.intel.com/ipex-whl-stable

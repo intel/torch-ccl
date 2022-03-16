@@ -30,43 +30,24 @@ IF (USE_SYSTEM_ONECCL)
         SET(CCL_CONFIGURATION "cpu_icc")
     ENDIF()
 
-    find_path(ONECCL_INCLUDE_DIR
-            NAMES oneapi/ccl.hpp
-            HINTS ${oneapi_root_hint}/ccl/latest
-            PATH_SUFFIXES include/${CCL_CONFIGURATION})
-    find_library(ONECCL_LIBRARIES
-            NAMES ccl
-            HINTS ${oneapi_root_hint}/ccl/latest
-            PATH_SUFFIXES lib/${CCL_CONFIGURATION})
+    find_package(oneCCL CONFIG REQUIRED PATHS ${INTELONEAPIROOT}/ccl/latest)
 
-    include(FindPackageHandleStandardArgs)
-    find_package_handle_standard_args(oneCCL
-            REQUIRED_VARS
-            ONECCL_INCLUDE_DIR
-            ONECCL_LIBRARIES
-            HANDLE_COMPONENTS
-            )
+    SET(ONECCL_LIBRARIES oneCCL)
+    SET(ONECCL_FOUND TRUE)
 ENDIF(USE_SYSTEM_ONECCL)
 
 IF (NOT ONECCL_FOUND)
 
     SET(ONECCL_ROOT "${PROJECT_SOURCE_DIR}/third_party/oneCCL")
 
-    ADD_SUBDIRECTORY(${ONECCL_ROOT} )
+    ADD_SUBDIRECTORY(${ONECCL_ROOT})
     IF(NOT TARGET ccl)
         MESSAGE(FATAL_ERROR "Failed to find oneCCL target")
     ENDIF()
     GET_TARGET_PROPERTY(INCLUDE_DIRS ccl INCLUDE_DIRECTORIES)
     SET(ONECCL_INCLUDE_DIR ${INCLUDE_DIRS})
-#    add_library(mpi SHARED IMPORTED)
-#    set_target_properties(mpi PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/mpi/lib/libmpi.so)
-#
-#
-#    add_library(fabric SHARED IMPORTED)
-#    set_target_properties(fabric PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/third_party/oneCCL/ofi/lib/libfabric.so)
-#
-#    SET(ONECCL_LIBRARIES ccl fabric mpi)
     SET(ONECCL_LIBRARIES ccl)
+
 ENDIF(NOT ONECCL_FOUND)
 
 ENDIF(NOT ONECCL_FOUND)

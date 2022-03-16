@@ -68,14 +68,6 @@ class BuildCMakeExt(BuildExtension):
         """
         cmake_extensions = [ext for ext in self.extensions if isinstance(ext, CMakeExtension)]
         for ext in cmake_extensions:
-            try:
-                # temp patch the oneCCL code
-                check_call(["git", "apply", os.path.join(CWD, "patches/Update_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/oneCCL"))
-            except Exception as e:
-                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-                print(e)
-                print("=" * 64)
-                pass
             self.build_cmake(ext)
 
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
@@ -139,12 +131,6 @@ class Clean(clean):
     def run(self):
         import glob
         import re
-        try:
-            check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
-        except Exception as e:
-            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-            print(e)
-            print("=" * 64)
 
         with open('.gitignore', 'r') as f:
             ignores = f.read()

@@ -103,13 +103,12 @@ class BuildCMakeExt(BuildExtension):
             # skip the example and test code in oneCCL
             'BUILD_EXAMPLES': 'OFF',
             'BUILD_CONFIG': 'OFF',
-            'BUILD_UT': 'OFF',
             'BUILD_FT': 'OFF'
         }
 
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
                 import intel_extension_for_pytorch
@@ -124,7 +123,7 @@ class BuildCMakeExt(BuildExtension):
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
                 check_call(['make', 'torch_ccl_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 

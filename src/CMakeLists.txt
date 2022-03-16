@@ -8,7 +8,7 @@ target_compile_options(torch_ccl PUBLIC -Wall
         -Wno-sign-compare
         -Wno-unused-function)
 
-if(COMPUTE_BACKEND STREQUAL "dpcpp_level_zero")
+if(COMPUTE_BACKEND STREQUAL "dpcpp")
     target_compile_options(torch_ccl PUBLIC -fsycl)
     add_subdirectory(./gpu)
 endif()

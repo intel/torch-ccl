@@ -70,9 +70,11 @@ class BuildCMakeExt(BuildExtension):
         for ext in cmake_extensions:
             try:
                 # temp patch the oneCCL code
-                check_call(["git", "apply", "./patches/Update_Internal_oneCCL.patch"], cwd=CWD)
-            except:
-                # ignore patch fail
+                check_call(["git", "apply", os.path.join(CWD, "patches/Update_oneCCL.patch")], cwd=os.path.join(CWD, "third_party/oneCCL"))
+            except Exception as e:
+                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+                print(e)
+                print("=" * 64)
                 pass
             self.build_cmake(ext)
 
@@ -93,6 +95,7 @@ class BuildCMakeExt(BuildExtension):
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
+        my_env["CMAKE_DISABLE_FIND_PACKAGE_MKL"] = "TRUE"
         build_type = 'Release'
 
         if _check_env_flag('DEBUG'):

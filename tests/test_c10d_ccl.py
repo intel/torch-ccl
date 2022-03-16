@@ -3,7 +3,7 @@ import os
 import torch
 
 try:
-    import ipex
+    import intel_extension_for_pytorch
     xpu_is_avaliable = torch.xpu.is_available()
 except ImportError:
     # ignore the ipex

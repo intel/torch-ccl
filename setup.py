@@ -115,8 +115,8 @@ class BuildCMakeExt(BuildExtension):
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                import ipex
-                build_options['CMAKE_PREFIX_PATH'] += ";" + ipex.cmake_prefix_path
+                import intel_extension_for_pytorch
+                build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc

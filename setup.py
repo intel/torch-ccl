@@ -98,6 +98,8 @@ class BuildCMakeExt(BuildExtension):
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
             'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
+            # Enable the RPATH of the oneCCL
+            'ENABLE_LINKER_RPATH': 'ON',
             # skip the example and test code in oneCCL
             'BUILD_EXAMPLES': 'OFF',
             'BUILD_CONFIG': 'OFF',

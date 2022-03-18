@@ -7,9 +7,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=cpp")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat-security")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector")
 
-find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-
 set(LINUX TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_INSTALL_MESSAGE NEVER)
@@ -26,10 +23,14 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
 option(USE_SYSTEM_ONECCL "Use oneCCL library in system" OFF)
 
+# Find the Torch lib
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
 # Find OneCCL Lib
 set(DEPENDS_LIB)
 find_package(oneCCL REQUIRED)
-list(APPEND DEPENDS_LIB ${ONECCL_LIBRARIES})
+list(APPEND DEPENDS_LIB oneCCL torch)
 
 SET(LIB_NAME "torch_ccl")
 

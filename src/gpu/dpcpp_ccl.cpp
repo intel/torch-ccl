@@ -489,16 +489,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
               }
 
               ccl::event ret_evt;
-              CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "gather", [&] {
-                  call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                      CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
-                                                         sendCounts,
-                                                         flatOutput.data_ptr<scalar_t>(),
-                                                         recvCounts,
-                                                         cclDatatypes.at(flatOutput.scalar_type()),
-                                                         comm,
-                                                         stream), stream.get_native());
-                  });
+              call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                  CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr(),
+                                                     sendCounts,
+                                                     flatOutput.data_ptr(),
+                                                     recvCounts,
+                                                     cclDatatypes.at(flatOutput.scalar_type()),
+                                                     comm,
+                                                     stream), stream.get_native());
               });
 
               // TODO : add to post and pre hooks
@@ -559,16 +557,15 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 ccl::communicator& comm,
                 ccl::stream& stream) {
                 ccl::event ret_evt;
-                CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "alltoall_base", [&] {
-                    call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                        CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoall(input.data_ptr<scalar_t>(),
-                                                          output.data_ptr<scalar_t>(),
-                                                          (size_t)output.numel() / comm.size(),
-                                                          cclDatatypes.at(output.scalar_type()),
-                                                          comm,
-                                                          stream,
-                                                          attr), stream.get_native());
-                    });
+
+                call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                    CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoall(input.data_ptr(),
+                                                      output.data_ptr(),
+                                                      (size_t)output.numel() / comm.size(),
+                                                      cclDatatypes.at(output.scalar_type()),
+                                                      comm,
+                                                      stream,
+                                                      attr), stream.get_native());
                 });
 
                 return ret_evt;
@@ -587,36 +584,34 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 ccl::communicator& comm,
                 ccl::stream& stream) {
                 ccl::event ret_evt;
-                CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "alltoall_base", [&] {
-                    c10d::checkSplitSizes(inputSplitSizes, input, grp_size);
-                    c10d::checkSplitSizes(outputSplitSizes, output, grp_size);
+                c10d::checkSplitSizes(inputSplitSizes, input, grp_size);
+                c10d::checkSplitSizes(outputSplitSizes, output, grp_size);
 
-                    std::vector<size_t> sendCounts(grp_size);
-                    std::vector<size_t> recvCounts(grp_size);
-                    bool inputSplitsEqual = inputSplitSizes.size() == 0;
-                    bool outputSplitsEqual = outputSplitSizes.size() == 0;
+                std::vector<size_t> sendCounts(grp_size);
+                std::vector<size_t> recvCounts(grp_size);
+                bool inputSplitsEqual = inputSplitSizes.size() == 0;
+                bool outputSplitsEqual = outputSplitSizes.size() == 0;
 
-                    size_t inLen = input.numel();
-                    size_t outLen = output.numel();
-                    if (inLen) inLen /= (inputSplitsEqual ? grp_size : input.size(0));
-                    if (outLen) outLen /= (outputSplitsEqual ? grp_size : output.size(0));
+                size_t inLen = input.numel();
+                size_t outLen = output.numel();
+                if (inLen) inLen /= (inputSplitsEqual ? grp_size : input.size(0));
+                if (outLen) outLen /= (outputSplitsEqual ? grp_size : output.size(0));
 
-                    for (int i = 0; i < grp_size; i++)
-                    {
-                      sendCounts[i] = (inputSplitsEqual ? inLen : inputSplitSizes[i] * inLen);
-                      recvCounts[i] = (outputSplitsEqual ? outLen : outputSplitSizes[i] * outLen);
-                    }
+                for (int i = 0; i < grp_size; i++)
+                {
+                  sendCounts[i] = (inputSplitsEqual ? inLen : inputSplitSizes[i] * inLen);
+                  recvCounts[i] = (outputSplitsEqual ? outLen : outputSplitSizes[i] * outLen);
+                }
 
-                    call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                        CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
-                                                           sendCounts,
-                                                           output.data_ptr<scalar_t>(),
-                                                           recvCounts,
-                                                           cclDatatypes.at(output.scalar_type()),
-                                                           comm,
-                                                           stream,
-                                                           attr), stream.get_native());
-                    });
+                call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                    CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr(),
+                                                       sendCounts,
+                                                       output.data_ptr(),
+                                                       recvCounts,
+                                                       cclDatatypes.at(output.scalar_type()),
+                                                       comm,
+                                                       stream,
+                                                       attr), stream.get_native());
                 });
                 return ret_evt;
             },

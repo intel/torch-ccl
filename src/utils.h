@@ -112,9 +112,14 @@ public:
     for(auto& event : events) {
       bool flag;
 
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_CHECK(flag = event.test());
-      });
+      try {
+        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+            CCL_CHECK(flag = event.test());
+        });
+      } catch (...) {
+        finishAsyncWorkCCLError(std::current_exception());
+        return true;
+      }
 
       if (!flag) {
         return false;
@@ -224,9 +229,16 @@ public:
     for(auto& ret : rets) {
       bool flag;
       ccl::event& req = get_event_from_ret_<ret_t>(ret);
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-          CCL_CHECK(flag = req.test());
-      });
+
+      try {
+        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+            CCL_CHECK(flag = req.test());
+        });
+      } catch (...) {
+        finishAsyncWorkCCLError(std::current_exception());
+        return true;
+      }
+
       if (!flag) {
         return false;
       }
@@ -239,6 +251,13 @@ public:
     return (
             std::chrono::duration_cast<std::chrono::milliseconds>(
                     currentTimepoint - workStartTime_) >= timeout);
+  }
+
+  void checkAndThrowException() {
+    // Throw an exception, only if we have a valid exception.
+    if (exception()) {
+      std::rethrow_exception(exception());
+    }
   }
 
   void synchronizeInternal(std::chrono::milliseconds timeout) {
@@ -257,14 +276,11 @@ public:
                 rank_,
                 "] ",
                 "Caught collective operation timeout: ",
-//                (*this),
                 " ran for ",
                 timeElapsed.count(),
                 " milliseconds before timing out.");
         TORCH_CHECK(false, exceptionMsg);
       }
-      // Check for errors and throw appropriate exception.
-//      checkAndThrowException();
       std::this_thread::sleep_for(
               std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
     }

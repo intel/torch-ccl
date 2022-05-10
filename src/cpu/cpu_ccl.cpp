@@ -219,6 +219,7 @@ std::shared_ptr<cpu_completion_callback<RunF>> make_cpu_callback(RunF f) {
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::enqueue(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work) {
+  work->run();
   std::unique_lock<std::mutex> lock(pgMutex_);
   queue_.push_back(work);
   lock.unlock();
@@ -257,13 +258,13 @@ void VanillaCPU::runLoop() {
     queueConsumeCV_.notify_one();
 
     try {
-      work->run();
+      work->synchronize();
+      work->finishAsyncWorkCCL();
+
     } catch (...) {
       work->finishAsyncWorkCCLError(std::current_exception());
     }
 
-    work->synchronize();
-    work->finishAsyncWorkCCL();
     lock.lock();
   }
 }

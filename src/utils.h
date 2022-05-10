@@ -40,7 +40,7 @@
 #include "ProcessGroupCCL.hpp"
 
 
-constexpr int64_t kSynchronizeBusyWaitMillis = 10;
+constexpr uint64_t kSynchronizeBusyWaitMicro = 50; // 50us
 
 #define CCL_CHECK(cmd)                                               \
   do {                                                               \
@@ -282,7 +282,7 @@ public:
         TORCH_CHECK(false, exceptionMsg);
       }
       std::this_thread::sleep_for(
-              std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
+              std::chrono::microseconds (kSynchronizeBusyWaitMicro));
     }
 
     this->rets.clear();

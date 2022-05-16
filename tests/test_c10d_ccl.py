@@ -4,7 +4,7 @@ import torch
 
 try:
     import intel_extension_for_pytorch
-    xpu_is_avaliable = torch.xpu.is_available()
+    xpu_is_avaliable = torch.xpu.is_available() if hasattr(torch, 'xpu') else False
 except ImportError:
     # ignore the ipex
     xpu_is_avaliable = False

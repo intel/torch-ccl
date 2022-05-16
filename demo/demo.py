@@ -3,7 +3,11 @@ import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-import intel_extension_for_pytorch
+try:
+   import intel_extension_for_pytorch
+except:
+   print("cant't import ipex")
+
 import torch_ccl
 
 
@@ -32,10 +36,10 @@ if __name__ == "__main__":
     # Initialize the process group with ccl backend
     dist.init_process_group(backend='ccl')
 
-    device = "xpu:{}".format(dist.get_rank())
+    device = 'cpu' #"xpu:{}".format(dist.get_rank())
     model = Model().to(device)
     if dist.get_world_size() > 1:
-        model = DDP(model, device_ids=[device])
+        model = DDP(model, device_ids=[device] if device is not 'cpu' else None)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     loss_fn = nn.MSELoss().to(device)

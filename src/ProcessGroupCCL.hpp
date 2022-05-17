@@ -37,6 +37,7 @@
 #include <mutex>
 #include <vector>
 
+#include <torch/version.h>
 #include <c10d/ProcessGroup.hpp>
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
@@ -107,9 +108,11 @@ public:
                            std::chrono::milliseconds);
   virtual ~ProcessGroupCCL();
 
+#if TORCH_VERSION_MINOR >= 11
   const std::string getBackendName() const override {
     return std::string(CCL_BACKEND_NAME);
   }
+#endif
 
   c10::intrusive_ptr<ProcessGroup::Work> broadcast(
       std::vector<at::Tensor>& data,

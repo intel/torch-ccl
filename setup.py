@@ -93,6 +93,7 @@ class BuildCMakeExt(BuildExtension):
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
+        my_env["CMAKE_DISABLE_FIND_PACKAGE_MKL"] = "TRUE"
         build_type = 'Release'
 
         if _check_env_flag('DEBUG'):
@@ -102,11 +103,11 @@ class BuildCMakeExt(BuildExtension):
             'CMAKE_BUILD_TYPE' : build_type,
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
-            'PYTORCH_LIBRARY_DIRS': CMakeExtension.convert_cmake_dirs(library_paths()),
+            # Enable the RPATH of the oneCCL
+            'ENABLE_LINKER_RUNPATH': 'ON',
             # skip the example and test code in oneCCL
             'BUILD_EXAMPLES': 'OFF',
             'BUILD_CONFIG': 'OFF',
-            'BUILD_UT': 'OFF',
             'BUILD_FT': 'OFF'
         }
 
@@ -115,8 +116,8 @@ class BuildCMakeExt(BuildExtension):
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                import ipex
-                build_options['CMAKE_PREFIX_PATH'] += ";" + ipex.cmake_prefix_path
+                import intel_extension_for_pytorch
+                build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc

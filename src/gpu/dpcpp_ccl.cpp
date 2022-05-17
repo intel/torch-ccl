@@ -158,6 +158,8 @@ public:
   // Waiting on the work's on XPU backend
   bool wait(std::chrono::milliseconds timeout) override {
     this->synchronizeInternal(timeout);
+    // Check for errors and throw appropriate exception.
+    this->checkAndThrowException();
     return true;
   }
 

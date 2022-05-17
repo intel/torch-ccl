@@ -47,18 +47,6 @@ namespace torch_ccl
 
 namespace {
 
-// Type mapping
-
-std::map<ccl::datatype, at::ScalarType> ptDatatypes =
-  {
-    {ccl::datatype::uint8, at::kByte},
-    {ccl::datatype::int32, at::kInt},
-    {ccl::datatype::bfloat16, at::kBFloat16},
-    {ccl::datatype::float32, at::kFloat},
-    {ccl::datatype::float64, at::kDouble},
-    {ccl::datatype::int64, at::kLong}
-  };
-
 void checkSameSizeAndType(const at::Tensor& tensor,
                           const std::vector<at::Tensor>& tensors) __attribute__((unused));
 
@@ -231,6 +219,7 @@ std::shared_ptr<cpu_completion_callback<RunF>> make_cpu_callback(RunF f) {
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::enqueue(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work) {
+  work->run();
   std::unique_lock<std::mutex> lock(pgMutex_);
   queue_.push_back(work);
   lock.unlock();
@@ -269,13 +258,13 @@ void VanillaCPU::runLoop() {
     queueConsumeCV_.notify_one();
 
     try {
-      work->run();
+      work->synchronize();
+      work->finishAsyncWorkCCL();
+
     } catch (...) {
       work->finishAsyncWorkCCLError(std::current_exception());
     }
 
-    work->synchronize();
-    work->finishAsyncWorkCCL();
     lock.lock();
   }
 }

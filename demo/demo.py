@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 try:
-   import ipex
+   import intel_extension_for_pytorch
 except:
    print("cant't import ipex")
 

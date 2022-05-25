@@ -34,6 +34,23 @@
 #include <dispatch_stub.h>
 #include <ipex.h>
 
+
+#define CCL_KERNEL_SUBMIT(cmd, q) \
+({bool profile_barrier = (is_profiler_enabled());                               \
+    sycl::event start_evt;                                                    \
+    if (profile_barrier) {                                                    \
+      start_evt = xpu::dpcpp::queue_barrier((q));                               \
+    }                                                                         \
+    CCL_CHECK(cmd);                                                    \
+                                                                              \
+    sycl::event end_evt;                                                      \
+    if (profile_barrier) {                                                    \
+      end_evt = xpu::dpcpp::queue_barrier((q));                                 \
+      dpcpp_log("oneccl", start_evt, end_evt);                                   \
+    }                          \
+    })
+
+
 namespace torch_ccl
 {
 
@@ -168,9 +185,6 @@ private:
 };
 
 void execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work) {
-//  if(work->recordFunctionBeforeCallback_){
-//    work->recordFunctionBeforeCallback_();
-//  }
   try {
     work->run();
   } catch (...) {
@@ -269,19 +283,18 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
+          CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
                                              output.data_ptr(),
                                              (size_t) input.numel(),
                                              cclDatatypes.at(input.scalar_type()),
                                              cclOps.at(opts.reduceOp),
                                              comm,
                                              stream,
-                                             attr););
+                                             attr), stream.get_native());
       });
       return ret_evt;
   },
-  c10d::OpType::ALLREDUCE,
-  "torch_ccl::xpu_work::allreduce");
+  c10d::OpType::ALLREDUCE);
 
   work->debugName = std::string("xpu::allreduce");
   execute(work);
@@ -308,20 +321,19 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
+        CCL_KERNEL_SUBMIT(ret_evt = ccl::reduce(input.data_ptr(),
                                 output.data_ptr(),
                                 (size_t) input.numel(),
                                 cclDatatypes.at(input.scalar_type()),
                                 cclOps.at(opts.reduceOp),
                                 root,
                                 comm,
-                                stream););
+                                stream), stream.get_native());
       });
       return ret_evt;
 
   },
-    c10d::OpType::REDUCE,
-    "torch_ccl::xpu_work::reduce");
+    c10d::OpType::REDUCE);
 
   work->debugName = std::string("xpu::reduce");
   execute(work);
@@ -348,18 +360,17 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr(),
+          CCL_KERNEL_SUBMIT(ret_evt = ccl::broadcast(input.data_ptr(),
                                              (size_t) input.numel(),
                                              cclDatatypes.at(input.scalar_type()),
                                              root,
                                              comm,
                                              stream,
-                                             attr));
+                                             attr), stream.get_native());
       });
       return ret_evt;
     },
-    c10d::OpType::BROADCAST,
-    "torch_ccl::xpu_work::broadcast");
+    c10d::OpType::BROADCAST);
 
 
   work->debugName = std::string("xpu::broadcast");
@@ -401,19 +412,18 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
                      });
 
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+        CCL_KERNEL_SUBMIT(ret_evt = ccl::allgatherv(input.data_ptr(),
                                   (size_t) input.numel(),
                                   recvBufs,
                                   recvCounts,
                                   cclDatatypes.at(input.scalar_type()),
                                   comm,
-                                  stream););
+                                  stream), stream.get_native());
       });
 
       return ret_evt;
     },
-    c10d::OpType::ALLGATHER,
-    "torch_ccl::xpu_work::allgather");
+    c10d::OpType::ALLGATHER);
 
   work->debugName = std::string("xpu::allgather");
   execute(work);
@@ -481,13 +491,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
               ccl::event ret_evt;
               CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "gather", [&] {
                   call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                      CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
+                      CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
                                                          sendCounts,
                                                          flatOutput.data_ptr<scalar_t>(),
                                                          recvCounts,
                                                          cclDatatypes.at(flatOutput.scalar_type()),
                                                          comm,
-                                                         stream););
+                                                         stream), stream.get_native());
                   });
               });
 
@@ -511,8 +521,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
 
               return ret_evt;
           },
-          c10d::OpType::GATHER,
-          "torch_ccl::xpu_work::gather");
+          c10d::OpType::GATHER);
 
   work->debugName = std::string("xpu::gather");
   execute(work);
@@ -552,20 +561,19 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 ccl::event ret_evt;
                 CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(input.scalar_type(), "alltoall_base", [&] {
                     call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                        CCL_CHECK(ret_evt = ccl::alltoall(input.data_ptr<scalar_t>(),
+                        CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoall(input.data_ptr<scalar_t>(),
                                                           output.data_ptr<scalar_t>(),
                                                           (size_t)output.numel() / comm.size(),
                                                           cclDatatypes.at(output.scalar_type()),
                                                           comm,
                                                           stream,
-                                                          attr););
+                                                          attr), stream.get_native());
                     });
                 });
 
                 return ret_evt;
             },
-            c10d::OpType::ALLTOALL_BASE,
-            "torch_ccl::xpu_work::alltoall_base");
+            c10d::OpType::ALLTOALL_BASE);
   }
   else{
     // Need alltoallv
@@ -600,20 +608,19 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                     }
 
                     call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                        CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
+                        CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr<scalar_t>(),
                                                            sendCounts,
                                                            output.data_ptr<scalar_t>(),
                                                            recvCounts,
                                                            cclDatatypes.at(output.scalar_type()),
                                                            comm,
                                                            stream,
-                                                           attr););
+                                                           attr), stream.get_native());
                     });
                 });
                 return ret_evt;
             },
-            c10d::OpType::ALLTOALL_BASE,
-            "torch_ccl::xpu_work::alltoall_base");
+            c10d::OpType::ALLTOALL_BASE);
   }
 
   work->debugName = std::string("xpu::alltoall_base");
@@ -671,13 +678,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
               ccl::event ret_evt;
               CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(flatInput.scalar_type(), "xpu::alltoall", [&] {
                   call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                      CCL_CHECK(ret_evt = ccl::alltoallv(flatInput.data_ptr<scalar_t>(),
+                      CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(flatInput.data_ptr<scalar_t>(),
                                                          sendCounts,
                                                          flatOutput.data_ptr<scalar_t>(),
                                                          recvCounts,
                                                          cclDatatypes.at(flatOutput.scalar_type()),
                                                          comm,
-                                                         stream););
+                                                         stream), stream.get_native());
                   });
 
               });
@@ -695,8 +702,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
               }
               return ret_evt;
           },
-          c10d::OpType::ALLTOALL,
-          "torch_ccl::xpu_work::alltoall");
+          c10d::OpType::ALLTOALL);
 
   work->debugName = std::string("xpu::alltoall");
   execute(work);

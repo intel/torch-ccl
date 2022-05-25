@@ -36,7 +36,8 @@ if __name__ == "__main__":
     # Initialize the process group with ccl backend
     dist.init_process_group(backend='ccl')
 
-    device = 'cpu' #"xpu:{}".format(dist.get_rank())
+    # device = 'cpu' #"xpu:{}".format(dist.get_rank())
+    device = "xpu:0"
     model = Model().to(device)
     if dist.get_world_size() > 1:
         model = DDP(model, device_ids=[device] if device is not 'cpu' else None)
@@ -55,7 +56,9 @@ if __name__ == "__main__":
         L = loss_fn(res, labels)
         # backward
         print("Runing backward: {} on device {}".format(i, device))
-        L.backward()
+        with torch.autograd.profiler_legacy.profile(enabled=True, use_xpu=True) as prof:
+            L.backward()
+        print(prof)
         # update
         print("Runing optim: {} on device {}".format(i, device))
         optimizer.step()

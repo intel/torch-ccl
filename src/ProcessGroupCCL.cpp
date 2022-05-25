@@ -92,12 +92,13 @@ ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>>
 // Profiler: Pass nullptr as profilingTitle to parent constructor to
 // replace default profiler implementation with async version that reports
 // correct timestamps for work that is asynchronously executed.
-        : ProcessGroup::Work(rank, opType, profilingTitle, inputTensors),
+        : ProcessGroup::Work(rank, opType, nullptr, inputTensors),
           outputTensors_(std::move(outputTensors)),
           future_(createFutureAsOutput(outputTensors)) {
-//  if (profilingTitle != nullptr) {
+  if (profilingTitle != nullptr) {
 //    recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
-//  }
+    // TODO: for cpu async profiling repot.
+  }
 }
 
 c10::intrusive_ptr<c10::ivalue::Future> ProcessGroupCCL::AsyncWorkCCL::getFuture() {

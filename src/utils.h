@@ -53,6 +53,7 @@ constexpr uint64_t kSynchronizeBusyWaitMicro = 50; // 50us
     }                                                                \
   }while(0)
 
+
 #define CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(TYPE, NAME, ...)                          \
   [&] {                                                                      \
     const auto& the_type = TYPE;                                             \
@@ -376,7 +377,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   pre_process pre,
   post_process post,
   c10d::OpType op_type,
-  const char* prof_title) {
+  const char* prof_title = nullptr) {
   using traits = function_traits<fn>;
   using attr_t = typename traits::template arg<2>::type;
   attr_t attr = ccl::create_operation_attr<attr_t>();
@@ -399,7 +400,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   std::vector<output_t>& outputs,
   fn fun,
   c10d::OpType op_type,
-  const char* prof_title) {
+  const char* prof_title = nullptr) {
   return collective<get_ccl_fn, WorkCCL>(
     pg_ccl,
     inputs,

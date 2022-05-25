@@ -92,11 +92,11 @@ public:
 
     void finishAsyncWorkCCLError(std::exception_ptr eptr);
 
-  protected:
-    friend class ProcessGroupCCL;
-
   public:
     std::string debugName;
+
+  protected:
+    friend class ProcessGroupCCL;
     const std::vector<std::vector<at::Tensor>> outputTensors_;
     // The future returned by getFuture.
     c10::intrusive_ptr<at::ivalue::Future> future_;

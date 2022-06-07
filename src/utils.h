@@ -69,7 +69,7 @@ constexpr uint64_t kSynchronizeBusyWaitMicro = 50; // 50us
     }                                                                        \
   }()
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 using c10d::ProcessGroupCCL;
 

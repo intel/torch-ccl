@@ -34,7 +34,7 @@
 #include "utils.h"
 #include "ProcessGroupCCL.hpp"
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 using namespace c10d;
 
@@ -170,7 +170,7 @@ public:
   }
 private:
   static void fail(c10::DeviceType dev_type, const std::string method) {
-    TORCH_CHECK(false, "torch_ccl: ", method, " isn't implementd on backend [", dev_type, "].");
+    TORCH_CHECK(false, "oneccl_bindings_for_pytorch: ", method, " isn't implementd on backend [", dev_type, "].");
   }
 };
 

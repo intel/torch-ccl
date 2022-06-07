@@ -33,7 +33,7 @@
 #include "dispatch_stub.h"
 
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 using namespace c10d;
 
@@ -75,7 +75,7 @@ protected:
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::allreduce: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::allreduce: ";
     format_pg_rank(os, pg_ccl);
     os << " ";
     format_tensors_size(os, tensors);
@@ -89,7 +89,7 @@ protected:
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::reduce: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::reduce: ";
     format_pg_rank(os, pg_ccl);
     os << " ";
     format_tensors_size(os, tensors);
@@ -104,7 +104,7 @@ protected:
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::allgather: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::allgather: ";
     format_pg_rank(os, pg_ccl);
     os << " input ";
     format_tensors_size(os, inputTensors);
@@ -121,7 +121,7 @@ protected:
                                                          const GatherOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::gather: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::gather: ";
     format_pg_rank(os, pg_ccl);
     os << " input ";
     format_tensors_size(os, inputTensors);
@@ -138,7 +138,7 @@ protected:
                                                           const ScatterOptions& opts,
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::scatter: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::scatter: ";
     format_pg_rank(os, pg_ccl);
     os << " input ";
     format_tensors_size(os, inputTensors);
@@ -154,7 +154,7 @@ protected:
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::broadcast: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::broadcast: ";
     format_pg_rank(os, pg_ccl);
     os << " ";
     format_tensors_size(os, tensors);
@@ -171,7 +171,7 @@ protected:
                                                                 const AllToAllOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::alltoall_base: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::alltoall_base: ";
     format_pg_rank(os, pg_ccl);
     os << " input ";
     format_tensors_size(os, inputTensor);
@@ -190,7 +190,7 @@ protected:
                                                            const AllToAllOptions& opts,
                                                            ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::alltoall: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::alltoall: ";
     format_pg_rank(os, pg_ccl);
     os << " inputs ";
     format_tensors_size(os, inputTensors);
@@ -205,7 +205,7 @@ protected:
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
-    os << "torch_ccl::" << dev_type << "::barrier: ";
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::barrier: ";
     format_pg_rank(os, pg_ccl);
     std::cout << os.str() << std::endl;
 
@@ -235,7 +235,7 @@ void DispatchStub::register_ccl_stub(c10::DeviceType dev_type, DispatchStub* stu
   TORCH_CHECK(stub_idx < dispatch_stubs.size(), "unknown device type [", dev_type, "].");
   TORCH_CHECK(dispatch_stubs[stub_idx] == default_stubs_addr, "device type [", dev_type, "] ccl stub has already been registered.");
 
-  if (torch_ccl_verbose())
+  if (oneccl_bindings_for_pytorch_verbose())
     stub = new DebugCCLStub(dev_type, stub);
 
   dispatch_stubs[stub_idx] = stub;

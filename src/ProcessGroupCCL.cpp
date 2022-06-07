@@ -42,9 +42,9 @@
 namespace c10d
 {
 
-using torch_ccl::DispatchStub;
-using torch_ccl::call_with_lock;
-using torch_ccl::format_tensors_param;
+using oneccl_bindings_for_pytorch::DispatchStub;
+using oneccl_bindings_for_pytorch::call_with_lock;
+using oneccl_bindings_for_pytorch::format_tensors_param;
 
 namespace {
 
@@ -156,12 +156,12 @@ c10::intrusive_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 
 ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int rank, int size, std::chrono::milliseconds op_time_out)
     : ProcessGroup(rank, size), store_(store), timeout(op_time_out),
-      ccl_member_(std::make_unique<torch_ccl::CCLCommCollector>())
+      ccl_member_(std::make_unique<oneccl_bindings_for_pytorch::CCLCommCollector>())
 {
 #ifdef NDEBUG
-    TORCH_CHECK(!torch_ccl_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
+    TORCH_CHECK(!oneccl_bindings_for_pytorch_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
 #else
-  if (torch_ccl_wait_gdb()) {
+  if (oneccl_bindings_for_pytorch_wait_gdb()) {
     volatile int gwf = 0;
     char hostname[256];
     gethostname(hostname, sizeof(hostname));
@@ -183,7 +183,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::broadcast(
 {
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, tensors);
-  RECORD_FUNCTION("torch_ccl::broadcast", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::broadcast", tensor_param);
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::broadcast(tensors, opts, *this);
@@ -197,7 +197,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allreduce(
 {
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, tensors);
-  RECORD_FUNCTION("torch_ccl::allreduce", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::allreduce", tensor_param);
 
   auto work = DispatchStub::allreduce(tensors, opts, *this);
   return work;
@@ -216,7 +216,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::reduce(
 {
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, tensors);
-  RECORD_FUNCTION("torch_ccl::reduce", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::reduce", tensor_param);
 
   checkRank(opts.rootRank, getSize());
   auto work = DispatchStub::reduce(tensors, opts, *this);
@@ -232,7 +232,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, inputTensors);
   format_tensors_param(tensor_param, outputTensors);
-  RECORD_FUNCTION("torch_ccl::allgather", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::allgather", tensor_param);
 
   auto work = DispatchStub::allgather(outputTensors, inputTensors, opts, *this);
   return work;
@@ -262,7 +262,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::gather(
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, inputTensors);
   format_tensors_param(tensor_param, outputTensors);
-  RECORD_FUNCTION("torch_ccl::gather", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::gather", tensor_param);
 
   auto work = DispatchStub::gather(outputTensors, inputTensors, opts, *this);
   return work;
@@ -276,7 +276,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::scatter(
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, inputTensors);
   format_tensors_param(tensor_param, outputTensors);
-  RECORD_FUNCTION("torch_ccl::scatter", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::scatter", tensor_param);
 
   auto work = DispatchStub::scatter(outputTensors, inputTensors, opts, *this);
   return work;
@@ -300,7 +300,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall_base(
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, inputTensor);
   format_tensors_param(tensor_param, outputTensor);
-  RECORD_FUNCTION("torch_ccl::alltoall_base", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::alltoall_base", tensor_param);
 
   auto work = DispatchStub::alltoall_base(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, *this);
   return work;
@@ -314,7 +314,7 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::alltoall(
   std::vector<c10::IValue> tensor_param;
   format_tensors_param(tensor_param, inputTensors);
   format_tensors_param(tensor_param, outputTensors);
-  RECORD_FUNCTION("torch_ccl::alltoall", tensor_param);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::alltoall", tensor_param);
 
   auto work = DispatchStub::alltoall(outputTensors, inputTensors, opts, *this);
   return work;

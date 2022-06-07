@@ -5,7 +5,7 @@
 #include "utils.h"
 
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 ccl::shared_ptr_class<ccl::kvs> CCLCommCollector::get_kvs(int rank, c10d::Store& store) {
   if (kvs)
@@ -41,7 +41,7 @@ ccl::shared_ptr_class<ccl::kvs> CCLCommCollector::get_kvs(int rank, c10d::Store&
   return kvs;
 }
 
-std::shared_ptr<torch_ccl::Comms> CCLCommCollector::get_comms(const std::string& devices_key) {
+std::shared_ptr<oneccl_bindings_for_pytorch::Comms> CCLCommCollector::get_comms(const std::string& devices_key) {
   if (ccl_comms.find(devices_key) != ccl_comms.end()) {
     // Reuse the cached communicator if there is one.
     return ccl_comms[devices_key];
@@ -50,7 +50,7 @@ std::shared_ptr<torch_ccl::Comms> CCLCommCollector::get_comms(const std::string&
 }
 
 void CCLCommCollector::add_comms(const std::string& devices_key,
-                                 std::shared_ptr<torch_ccl::Comms> comms) {
+                                 std::shared_ptr<oneccl_bindings_for_pytorch::Comms> comms) {
   if (ccl_comms.find(devices_key) != ccl_comms.end()) {
     // Replace the cached comms
     ccl_comms[devices_key] = comms;

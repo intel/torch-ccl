@@ -34,7 +34,7 @@
 #include <dispatch_stub.h>
 #include <ipex.h>
 
-namespace torch_ccl
+namespace oneccl_bindings_for_pytorch
 {
 
 namespace {
@@ -85,7 +85,7 @@ c10::DeviceType check_tensors_properties(const std::vector<at::Tensor>& tensors)
 
 Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices) {
 
-  RECORD_FUNCTION("torch_ccl::xpu::get_ccl_comms", std::vector<c10::IValue>());
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::get_ccl_comms", std::vector<c10::IValue>());
   // Sanity check
   if (devices_key.empty()) {
     throw std::runtime_error(
@@ -265,7 +265,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         ccl::allreduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::allreduce", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
@@ -281,7 +281,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
       return ret_evt;
   },
   c10d::OpType::ALLREDUCE,
-  "torch_ccl::xpu_work::allreduce");
+  "oneccl_bindings_for_pytorch::xpu_work::allreduce");
 
   work->debugName = std::string("xpu::allreduce");
   execute(work);
@@ -304,7 +304,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
         ccl::reduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::reduce", std::vector<c10::IValue>{input});
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::reduce", std::vector<c10::IValue>{input});
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
@@ -321,7 +321,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
 
   },
     c10d::OpType::REDUCE,
-    "torch_ccl::xpu_work::reduce");
+    "oneccl_bindings_for_pytorch::xpu_work::reduce");
 
   work->debugName = std::string("xpu::reduce");
   execute(work);
@@ -344,7 +344,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
         ccl::broadcast_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::broadcast", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::broadcast", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
@@ -359,7 +359,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
       return ret_evt;
     },
     c10d::OpType::BROADCAST,
-    "torch_ccl::xpu_work::broadcast");
+    "oneccl_bindings_for_pytorch::xpu_work::broadcast");
 
 
   work->debugName = std::string("xpu::broadcast");
@@ -384,7 +384,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
         ccl::allgatherv_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::allgather", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allgather", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       std::vector<size_t> recvCounts(outputs.size(), 0);
@@ -413,7 +413,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
       return ret_evt;
     },
     c10d::OpType::ALLGATHER,
-    "torch_ccl::xpu_work::allgather");
+    "oneccl_bindings_for_pytorch::xpu_work::allgather");
 
   work->debugName = std::string("xpu::allgather");
   execute(work);
@@ -512,7 +512,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
               return ret_evt;
           },
           c10d::OpType::GATHER,
-          "torch_ccl::xpu_work::gather");
+          "oneccl_bindings_for_pytorch::xpu_work::gather");
 
   work->debugName = std::string("xpu::gather");
   execute(work);
@@ -565,7 +565,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 return ret_evt;
             },
             c10d::OpType::ALLTOALL_BASE,
-            "torch_ccl::xpu_work::alltoall_base");
+            "oneccl_bindings_for_pytorch::xpu_work::alltoall_base");
   }
   else{
     // Need alltoallv
@@ -613,7 +613,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 return ret_evt;
             },
             c10d::OpType::ALLTOALL_BASE,
-            "torch_ccl::xpu_work::alltoall_base");
+            "oneccl_bindings_for_pytorch::xpu_work::alltoall_base");
   }
 
   work->debugName = std::string("xpu::alltoall_base");
@@ -696,7 +696,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
               return ret_evt;
           },
           c10d::OpType::ALLTOALL,
-          "torch_ccl::xpu_work::alltoall");
+          "oneccl_bindings_for_pytorch::xpu_work::alltoall");
 
   work->debugName = std::string("xpu::alltoall");
   execute(work);

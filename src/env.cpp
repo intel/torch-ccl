@@ -3,14 +3,14 @@
 #include <iostream>
 
 /*
- * All available launch options for TORCH_CCL
- * TORCH_CCL_ENV_VERBOSE:           Default = 0, Set verbose level in TORCH_CCL
- * TORCH_CCL_ENV_WAIT_GDB:          Default = 0, Set 1 to force the torch_ccl wait for GDB attaching
+ * All available launch options for ONECCL_BINDINGS_FOR_PYTORCH
+ * ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE:           Default = 0, Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH
+ * ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB:          Default = 0, Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching
  */
 
-#define TORCH_CCL_ENV_TYPE_DEF(var)                                     \
+#define ONECCL_BINDINGS_FOR_PYTORCH_ENV_TYPE_DEF(var)                                     \
     int var = [&]() -> int {                                            \
-      auto env = std::getenv("TORCH_CCL_" #var);                        \
+      auto env = std::getenv("ONECCL_BINDINGS_FOR_PYTORCH_" #var);                        \
       int _##var = 0;                                                   \
       try {                                                             \
         _##var = std::stoi(env, 0, 10);                                 \
@@ -18,11 +18,11 @@
       return _##var;                                                    \
     } ()
 
-int torch_ccl_env(int env_type) {
+int oneccl_bindings_for_pytorch_env(int env_type) {
 
   static struct {
-    TORCH_CCL_ENV_TYPE_DEF(ENV_VERBOSE);
-    TORCH_CCL_ENV_TYPE_DEF(ENV_WAIT_GDB);
+    ONECCL_BINDINGS_FOR_PYTORCH_ENV_TYPE_DEF(ENV_VERBOSE);
+    ONECCL_BINDINGS_FOR_PYTORCH_ENV_TYPE_DEF(ENV_WAIT_GDB);
   } env;
 
   switch (env_type) {

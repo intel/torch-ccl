@@ -19,10 +19,12 @@ from tools.setup.env import get_compiler
 
 # Constant known variables used throughout this file
 CWD = os.path.dirname(os.path.abspath(__file__))
-TORCH_CCL_PATH = os.path.join(CWD, "torch_ccl")
+ONECCL_BINDINGS_FOR_PYTORCH_PATH = os.path.join(CWD, "oneccl_bindings_for_pytorch")
+
 
 def _check_env_flag(name, default=''):
-  return os.getenv(name, default).upper() in ['ON', '1', 'YES', 'TRUE', 'Y']
+    return os.getenv(name, default).upper() in ['ON', '1', 'YES', 'TRUE', 'Y']
+
 
 def check_file(f):
     if not os.path.exists(f):
@@ -34,13 +36,12 @@ def check_file(f):
 # all the work we need to do _before_ setup runs
 def create_version():
     """Create the version string for torch-ccl"""
-    cwd = os.path.dirname(os.path.abspath(__file__))
     package_name = os.getenv('CCL_PACKAGE_NAME', 'oneccl-bind-pt')
     version = open('version.txt', 'r').read().strip()
     sha = 'Unknown'
 
     try:
-        sha = check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
+        sha = check_output(['git', 'rev-parse', 'HEAD'], cwd=CWD).decode('ascii').strip()
     except Exception:
         pass
 
@@ -48,9 +49,17 @@ def create_version():
         if sha != 'Unknown':
             version += '+' + sha[:7]
 
+    if os.environ.get("COMPUTE_BACKEND") == "dpcpp_level_zero":
+        backend = "xpu"
+    else:
+        backend = os.environ.get("ONECCL_BINDINGS_FOR_PYTORCH_BACKEND", "cpu")
+
+    if "+" not in version:
+        version += '+' + backend
+
     print("Building {}-{}".format(package_name, version))
 
-    version_path = os.path.join(cwd, 'torch_ccl', 'version.py')
+    version_path = os.path.join(CWD, 'oneccl_bindings_for_pytorch', 'version.py')
     with open(version_path, 'w') as f:
         f.write("__version__ = '{}'\n".format(version))
         f.write("git_version = {}\n".format(repr(sha)))
@@ -62,6 +71,7 @@ class BuildCMakeExt(BuildExtension):
     """
     Builds using cmake instead of the python setuptools implicit build
     """
+
     def run(self):
         """
         Perform build_cmake before doing the 'normal' stuff
@@ -89,7 +99,7 @@ class BuildCMakeExt(BuildExtension):
         build_dir = pathlib.Path('.'.join([self.build_temp, extension.name]))
 
         build_dir.mkdir(parents=True, exist_ok=True)
-        install_dir = TORCH_CCL_PATH
+        install_dir = ONECCL_BINDINGS_FOR_PYTORCH_PATH
 
         # Now that the necessary directories are created, build
         my_env = os.environ.copy()
@@ -100,7 +110,7 @@ class BuildCMakeExt(BuildExtension):
             build_type = 'Debug'
 
         build_options = {
-            'CMAKE_BUILD_TYPE' : build_type,
+            'CMAKE_BUILD_TYPE': build_type,
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
             # Enable the RPATH of the oneCCL
@@ -126,10 +136,10 @@ class BuildCMakeExt(BuildExtension):
         extension.generate(build_options, my_env, build_dir, install_dir)
 
         build_args = ['-j', str(os.cpu_count())]
-        check_call(['make', 'torch_ccl'] + build_args, cwd=str(build_dir))
+        check_call(['make', 'oneccl_bindings_for_pytorch'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
             if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
-                check_call(['make', 'torch_ccl_xpu'] + build_args, cwd=str(build_dir))
+                check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
 
@@ -166,10 +176,10 @@ class Clean(clean):
 
 def get_python_c_module():
     main_compile_args = []
-    main_libraries = ['torch_ccl']
+    main_libraries = ['oneccl_bindings_for_pytorch']
     main_link_args = []
-    main_sources = ["torch_ccl/csrc/_C.cpp", "torch_ccl/csrc/init.cpp"]
-    lib_path = os.path.join(TORCH_CCL_PATH, "lib")
+    main_sources = ["oneccl_bindings_for_pytorch/csrc/_C.cpp", "oneccl_bindings_for_pytorch/csrc/init.cpp"]
+    lib_path = os.path.join(ONECCL_BINDINGS_FOR_PYTORCH_PATH, "lib")
     library_dirs = [lib_path]
     include_path = os.path.join(CWD, "src")
     include_dirs = [include_path]
@@ -197,7 +207,7 @@ def get_python_c_module():
     def make_relative_rpath(path):
         return '-Wl,-rpath,$ORIGIN/' + path
 
-    _c_module = CppExtension("torch_ccl._C",
+    _c_module = CppExtension("oneccl_bindings_for_pytorch._C",
                              libraries=main_libraries,
                              sources=main_sources,
                              language='c',
@@ -213,14 +223,14 @@ if __name__ == '__main__':
     version, package_name = create_version()
     c_module = get_python_c_module()
     cmake_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "CMakeLists.txt")
-    modules = [CMakeExtension("libtorch_ccl", cmake_file), c_module]
+    modules = [CMakeExtension("liboneccl_bindings_for_pytorch", cmake_file), c_module]
     setup(
         name=package_name,
         version=version,
         ext_modules=modules,
-        packages=['torch_ccl'],
+        packages=['oneccl_bindings_for_pytorch'],
         package_data={
-            'torch_ccl': [
+            'oneccl_bindings_for_pytorch': [
                 '*.py',
                 '*/*.h',
                 '*/*.hpp',

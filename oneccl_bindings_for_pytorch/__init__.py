@@ -8,7 +8,7 @@ os.environ['CCL_ROOT'] = cwd
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
 os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
 if not os.path.exists(os.path.join(cwd, "version.py")):
-    raise RuntimeError("torch_ccl is not installed!")
+    raise RuntimeError("oneccl_bindings_for_pytorch is not installed!")
 
 from .version import __version__, git_version
 from . import _C as ccl_lib
@@ -18,7 +18,7 @@ if hasattr(torch, 'xpu'):
         try:
             # load the CCL/XPU library
             import ctypes
-            my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/libtorch_ccl_xpu.so"))
+            my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/liboneccl_bindings_for_pytorch_xpu.so"))
         except OSError:
             print("Warning: Cannot load xpu CCL. CCL doesn't work for XPU device")
 

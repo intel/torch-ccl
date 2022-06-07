@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 
-project(torch_ccl C CXX)
+project(oneccl_bindings_for_pytorch C CXX)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=cpp")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat-security")
@@ -32,7 +32,7 @@ set(DEPENDS_LIB)
 find_package(oneCCL REQUIRED)
 list(APPEND DEPENDS_LIB oneCCL torch)
 
-SET(LIB_NAME "torch_ccl")
+SET(LIB_NAME "oneccl_bindings_for_pytorch")
 
 add_subdirectory(./src)
 
@@ -55,9 +55,9 @@ function (print_configuration_summary)
     message(STATUS "  Compile flags         : ${IPEX_COMPILE_FLAGS}")
     message(STATUS "  Compile definitions   : ${CMAKE_COMPILE_DEFINITIONS}")
     message(STATUS "  Linker options        : ${CMAKE_SHARED_LINKER_FLAGS}")
-    get_target_property(LINK_LIBRARIES torch_ccl LINK_LIBRARIES)
+    get_target_property(LINK_LIBRARIES oneccl_bindings_for_pytorch LINK_LIBRARIES)
     message(STATUS "  Linker libraries        : ${LINK_LIBRARIES}")
-    get_target_property(LINK_DIRECTORS torch_ccl LINK_DIRECTORIES)
+    get_target_property(LINK_DIRECTORS oneccl_bindings_for_pytorch LINK_DIRECTORIES)
     message(STATUS "  Linker directors        : ${LINK_DIRECTORS}")
 
     message(STATUS "")

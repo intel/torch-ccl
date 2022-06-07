@@ -35,6 +35,7 @@
 #include <ipex.h>
 
 
+
 #define CCL_KERNEL_SUBMIT(cmd, q) \
 ({bool profile_barrier = (is_profiler_enabled());                               \
     sycl::event start_evt;                                                    \
@@ -51,7 +52,7 @@
     })
 
 
-namespace torch_ccl
+namespace oneccl_bindings_for_pytorch
 {
 
 namespace {
@@ -102,7 +103,7 @@ c10::DeviceType check_tensors_properties(const std::vector<at::Tensor>& tensors)
 
 Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices) {
 
-  RECORD_FUNCTION("torch_ccl::xpu::get_ccl_comms", std::vector<c10::IValue>());
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::get_ccl_comms", std::vector<c10::IValue>());
   // Sanity check
   if (devices_key.empty()) {
     throw std::runtime_error(
@@ -279,7 +280,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         ccl::allreduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::allreduce", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
@@ -317,7 +318,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
         ccl::reduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::reduce", std::vector<c10::IValue>{input});
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::reduce", std::vector<c10::IValue>{input});
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
@@ -356,7 +357,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
         ccl::broadcast_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::broadcast", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::broadcast", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
@@ -395,7 +396,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
         ccl::allgatherv_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("torch_ccl::xpu::allgather", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allgather", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       std::vector<size_t> recvCounts(outputs.size(), 0);

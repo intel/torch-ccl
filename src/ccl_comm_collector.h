@@ -36,7 +36,7 @@
 #include <unordered_map>
 #include "ProcessGroupCCL.hpp"
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 class Comms {
 public:
@@ -78,8 +78,8 @@ struct CCLCommCollector {
 
   ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store);
 
-  std::shared_ptr<torch_ccl::Comms> get_comms(const std::string& devices_key);
-  void add_comms(const std::string& devices_key, std::shared_ptr<torch_ccl::Comms> comms);
+  std::shared_ptr<oneccl_bindings_for_pytorch::Comms> get_comms(const std::string& devices_key);
+  void add_comms(const std::string& devices_key, std::shared_ptr<oneccl_bindings_for_pytorch::Comms> comms);
 
   // ccl kvs to identify the community.
   ccl::shared_ptr_class<ccl::kvs> kvs;
@@ -103,7 +103,7 @@ struct CCLCommCollector {
   //      "0,4,5,6,7,1,2,3"
   //
   //      Note that the order of the device for the tensor list matters.
-  std::unordered_map<std::string, std::shared_ptr<torch_ccl::Comms>> ccl_comms;
+  std::unordered_map<std::string, std::shared_ptr<oneccl_bindings_for_pytorch::Comms>> ccl_comms;
 
 };
 

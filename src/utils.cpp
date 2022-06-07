@@ -31,7 +31,7 @@
 
 #include "utils.h"
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 
 // Op mapping
 using c10d::ReduceOp;

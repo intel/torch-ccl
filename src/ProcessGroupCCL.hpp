@@ -43,7 +43,7 @@
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
 
-namespace torch_ccl {
+namespace oneccl_bindings_for_pytorch {
 struct CCLCommCollector;
 
 static inline void format_tensors_param(std::vector<c10::IValue>& param, const at::Tensor& tensor) {
@@ -207,7 +207,7 @@ public:
 
   std::chrono::milliseconds timeout;
 
-  std::unique_ptr<torch_ccl::CCLCommCollector> ccl_member_;
+  std::unique_ptr<oneccl_bindings_for_pytorch::CCLCommCollector> ccl_member_;
 
   static std::mutex globalMutex;
 };

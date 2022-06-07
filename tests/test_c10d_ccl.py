@@ -10,7 +10,7 @@ except ImportError:
     xpu_is_avaliable = False
     pass
 
-import torch_ccl
+import oneccl_bindings_for_pytorch
 from torch.testing._internal.common_utils import run_tests
 from torch.testing._internal.common_distributed import MultiProcessTestCase, \
      simple_sparse_reduce_tests, \

@@ -8,7 +8,7 @@ try:
 except:
    print("cant't import ipex")
 
-import torch_ccl
+import oneccl_bindings_for_pytorch
 
 
 class Model(nn.Module):

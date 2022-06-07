@@ -42,7 +42,7 @@
 #include <ATen/record_function.h>
 #include "../utils.h"
 
-namespace torch_ccl
+namespace oneccl_bindings_for_pytorch
 {
 
 namespace {
@@ -296,7 +296,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::ve
               return ret_evt;
           },
           c10d::OpType::ALLREDUCE,
-          "torch_ccl::cpu_work::allreduce");
+          "oneccl_bindings_for_pytorch::cpu_work::allreduce");
   work->debugName = std::string("cpu::allreduce");
   enqueue(work);
   return work;
@@ -330,7 +330,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vecto
               return ret_evt;
           },
           c10d::OpType::REDUCE,
-          "torch_ccl::cpu_work::reduce");
+          "oneccl_bindings_for_pytorch::cpu_work::reduce");
 
   work->debugName = std::string("cpu::reduce");
   enqueue(work);
@@ -362,7 +362,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::ve
               return ret_evt;
           },
           c10d::OpType::BROADCAST,
-          "torch_ccl::cpu_work::broadcast");
+          "oneccl_bindings_for_pytorch::cpu_work::broadcast");
 
   work->debugName = std::string("cpu::broadcast");
   enqueue(work);
@@ -431,7 +431,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::ve
         return ret_evt;
     },
     c10d::OpType::ALLGATHER,
-    "torch_ccl::cpu_work::allgather");
+    "oneccl_bindings_for_pytorch::cpu_work::allgather");
 
   work->debugName = std::string("cpu::allgather");
   enqueue(work);
@@ -523,7 +523,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vecto
        return ret_evt;
   },
   c10d::OpType::GATHER,
-  "torch_ccl::cpu_work::gather");
+  "oneccl_bindings_for_pytorch::cpu_work::gather");
     
   work->debugName = std::string("cpu::gather");
   enqueue(work);
@@ -570,7 +570,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at:
             return ret_evt;
           },
       c10d::OpType::ALLTOALL_BASE,
-      "torch_ccl::cpu_work::alltoall_base");
+      "oneccl_bindings_for_pytorch::cpu_work::alltoall_base");
 
   }
   else{
@@ -615,7 +615,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_base_(at:
             return ret_evt;
     },
     c10d::OpType::ALLTOALL_BASE,
-    "torch_ccl::cpu_work::alltoall_base");
+    "oneccl_bindings_for_pytorch::cpu_work::alltoall_base");
   }
 
   work->debugName = std::string("cpu::alltoall_base");
@@ -702,7 +702,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::alltoall_(std::vec
       return ret_evt;
   },
   c10d::OpType::ALLTOALL,
-  "torch_ccl::cpu_work::alltoall");
+  "oneccl_bindings_for_pytorch::cpu_work::alltoall");
  
   work->debugName = std::string("cpu::alltoall");
   enqueue(work);

@@ -36,7 +36,7 @@ def check_file(f):
 # all the work we need to do _before_ setup runs
 def create_version():
     """Create the version string for torch-ccl"""
-    package_name = os.getenv('CCL_PACKAGE_NAME', 'oneccl_bindings_for_pytorch')
+    package_name = os.getenv('CCL_PACKAGE_NAME', 'oneccl-bind-pt')
     version = open('version.txt', 'r').read().strip()
     sha = 'Unknown'
 
@@ -48,6 +48,14 @@ def create_version():
     if os.getenv('CCL_SHA_VERSION', False):
         if sha != 'Unknown':
             version += '+' + sha[:7]
+
+    if os.environ.get("COMPUTE_BACKEND") == "dpcpp_level_zero":
+        backend = "xpu"
+    else:
+        backend = os.environ.get("ONECCL_BINDINGS_FOR_PYTORCH_BACKEND", "cpu")
+
+    if "+" not in version:
+        version += '+' + backend
 
     print("Building {}-{}".format(package_name, version))
 

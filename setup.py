@@ -147,12 +147,14 @@ class Clean(clean):
     def run(self):
         import glob
         import re
-        try:
-            check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
-        except Exception as e:
-            print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-            print(e)
-            print("=" * 64)
+
+        if os.path.isfile(os.path.join(CWD, "third_party/oneCCL", "README.md")):
+            try:
+                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
+            except Exception as e:
+                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
+                print(e)
+                print("=" * 64)
 
         with open('.gitignore', 'r') as f:
             ignores = f.read()

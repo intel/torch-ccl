@@ -3,10 +3,20 @@ import sys
 import warnings
 import torch
 
+
+def set_env_default(env, key, value):
+    new_value = env.get(key, value)
+    env[key] = new_value
+
+
+env = os.environ
+
 cwd = os.path.dirname(os.path.abspath(__file__))
-os.environ['CCL_ROOT'] = cwd
+set_env_default(env, 'CCL_ROOT', cwd)
+
 FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
-os.environ['FI_PROVIDER_PATH'] = FI_PROVIDER_PATH
+set_env_default(env, 'FI_PROVIDER_PATH', FI_PROVIDER_PATH)
+
 if not os.path.exists(os.path.join(cwd, "version.py")):
     raise RuntimeError("oneccl_bindings_for_pytorch is not installed!")
 

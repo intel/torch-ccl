@@ -4,21 +4,23 @@ import warnings
 import torch
 
 
+cwd = os.path.dirname(os.path.abspath(__file__))
+if not os.path.exists(os.path.join(cwd, "version.py")):
+    raise RuntimeError("oneccl_bindings_for_pytorch is not installed!")
+
+
 def set_env_default(env, key, value):
     new_value = env.get(key, value)
     env[key] = new_value
 
 
-env = os.environ
+if os.environ.get("CCL_ROOT") is None:
+    # set the default oneCCL and MPI library path
+    set_env_default(os.environ, 'CCL_ROOT', cwd)
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-set_env_default(env, 'CCL_ROOT', cwd)
+    FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
+    set_env_default(os.environ, 'FI_PROVIDER_PATH', FI_PROVIDER_PATH)
 
-FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
-set_env_default(env, 'FI_PROVIDER_PATH', FI_PROVIDER_PATH)
-
-if not os.path.exists(os.path.join(cwd, "version.py")):
-    raise RuntimeError("oneccl_bindings_for_pytorch is not installed!")
 
 from .version import __version__, git_version
 from . import _C as ccl_lib

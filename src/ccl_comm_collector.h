@@ -40,11 +40,13 @@ namespace oneccl_bindings_for_pytorch {
 
 class Comms {
 public:
+  // for cpu case
   explicit Comms(ccl::vector_class<ccl::communicator> &comms) :
     comms(std::move(comms)), streams{} {}
 
-  explicit Comms(ccl::vector_class<ccl::communicator> &comms, std::vector<ccl::stream> &streams) :
-    comms(std::move(comms)), streams(std::move(streams)) {}
+  // for comms with streams
+  explicit Comms(ccl::vector_class<ccl::communicator> &comms, ccl::vector_class<ccl::stream> &streams, std::vector<c10::Stream> &torch_streams) :
+    comms(std::move(comms)), streams(std::move(streams)), torch_streams(std::move(torch_streams)) {}
 
   ~Comms() noexcept(false) {}
 
@@ -56,12 +58,14 @@ public:
   Comms &operator=(const Comms &) = delete;
 
   // Move constructable
-  Comms(Comms &&other) : comms(std::move(other.comms)), streams(std::move(other.streams)) {}
+  Comms(Comms &&other) : comms(std::move(other.comms)), streams(std::move(other.streams)),
+                         torch_streams(std::move(other.torch_streams)) {}
 
   // Move assignable
   Comms &operator=(Comms &&other) {
     std::swap(comms, other.comms);
     std::swap(streams, other.streams);
+    std::swap(torch_streams, other.torch_streams);
     return *this;
   }
 
@@ -70,6 +74,8 @@ public:
   ccl::vector_class<ccl::communicator> comms;
   // The streams used by CCL
   ccl::vector_class<ccl::stream> streams;
+  // one to one mapping the torch streams to the ccl::stream.
+  std::vector<c10::Stream> torch_streams;
 };
 
 struct CCLCommCollector {

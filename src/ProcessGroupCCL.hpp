@@ -88,7 +88,7 @@ public:
 
     std::vector<at::Tensor> result() override;
 
-    void finishAsyncWorkCCL();
+    virtual void finishAsyncWorkCCL();
 
     void finishAsyncWorkCCLError(std::exception_ptr eptr);
 

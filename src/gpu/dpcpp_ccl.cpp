@@ -56,6 +56,40 @@ namespace oneccl_bindings_for_pytorch
 {
 
 namespace {
+// [Sync Streams] Helper that lets the input ccl::stream to wait for the current
+// stream. oneCCL communications run on ccl::stream, but input tensors are
+// allocated on different streams (i.e., current streams). Communications on
+// ccl::stream cannot start before pending input tensor ops on current streams
+// finish. Otherwise, ops on two streams might read/write same tensors
+// concurrently.
+//
+// The synchronization above alone is not enough. We also need to make sure
+// input tensors are not freed before their usages on ccl::stream finish. This
+// can be achieved by calling aten::record_stream,
+// which remembers the usage stream (ccl::stream), creates an event on the usage
+// stream when GC attempts to free the input tensor, and delays GC until that
+// event is done.
+void sync_streams(
+        const std::vector<at::Device>& devices,
+        const std::vector<c10::Stream>& ccl_torch_streams) {
+  for (const auto i : c10::irange(devices.size())) {
+    DPCPPStream computation_stream = xpu::dpcpp::getCurrentDPCPPStream(devices[i].index());
+    DPCPPEvent evt;
+    evt.record(computation_stream);
+    Stream ccl_torch_stream = ccl_torch_streams[i];
+    evt.block(DPCPPStream(ccl_torch_stream));
+  }
+}
+
+void record_tensor(const at::Tensor& tensor, at::Stream stream) {
+  tensor.record_stream(stream);
+}
+
+void record_tensor(const std::vector<at::Tensor>& tensors, at::Stream stream) {
+  for (auto& tensor : tensors) {
+    tensor.record_stream(stream);
+  }
+}
 
 // Check that all `tensors' have the same device and type and shape and
 // are distributed across distinct GPUs if these are GPU tensors.
@@ -125,13 +159,18 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   int local_base_rank = pg_ccl.getRank() * devices.size();
 
   ccl::vector_class<ccl::pair_class<int, ccl::device>> devs_rank;
-  std::vector<ccl::stream> ccl_streams;
+  ccl::vector_class<ccl::stream> ccl_streams;
   ccl_streams.reserve(devices.size());
+  std::vector<c10::Stream> torch_streams;
+  torch_streams.reserve(devices.size());
 
   // Use the same queue for computation and communication.
   // TODO: IPEX doesn't support multiple queue for now. Copy engine requires a dedicate queue
-  auto q = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index()).dpcpp_queue();
+  //  auto q = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index()).dpcpp_queue();
+  DPCPPStream dpcpp_stream = xpu::dpcpp::getDPCPPStreamFromPool(false, devices[0].index());
+  auto q = dpcpp_stream.dpcpp_queue();
   ccl_streams.push_back(ccl::create_stream(q));
+  torch_streams.push_back(dpcpp_stream.unwrap());
 
   int rank = local_base_rank;
   devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
@@ -140,7 +179,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
 
 
-  std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams);
+  std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
   // Store the comms to cache
   pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);
 
@@ -164,8 +203,24 @@ public:
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
 
   void run() override {
+    const auto devices = get_device_list(this->inputs);
+
+    // add SYCL running dependency computation -> communication.
+    sync_streams(devices, this->comms.torch_streams);
+
+    for (const auto i : c10::irange(this->inputs.size())) {
+      // Both `inputs' and `outputs' are created on a worker stream and used in
+      // different ncclStreams.  Hence, both must record the ncclStream to
+      // prevent being freed before the collective finishes.
+      //
+      // We only record `inputs' here, and leave recording `outputs' to `fn' for
+      // operations where `inputs' and `outputs' are not the same.
+      //
+      // See [Sync Streams].
+      record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+    }
+
     CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>::run();
-    // add SYCL running dependency communication -> computation.
   };
 
   // No explicitly synchronization.
@@ -181,6 +236,11 @@ public:
     return true;
   }
 
+  void finishAsyncWorkCCL() override {
+    c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    // under the stream guard. Mark the Future completing.
+    this->AsyncWorkCCL::finishAsyncWorkCCL();
+  }
 private:
 
 };

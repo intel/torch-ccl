@@ -73,11 +73,13 @@ void sync_streams(
         const std::vector<at::Device>& devices,
         const std::vector<c10::Stream>& ccl_torch_streams) {
   for (const auto i : c10::irange(devices.size())) {
-    DPCPPStream computation_stream = xpu::dpcpp::getCurrentDPCPPStream(devices[i].index());
-    DPCPPEvent evt;
-    evt.record(computation_stream);
-    Stream ccl_torch_stream = ccl_torch_streams[i];
-    evt.block(DPCPPStream(ccl_torch_stream));
+    c10::impl::VirtualGuardImpl impl(devices[i].type());
+    // XPU doesn't support prioritized stream.
+    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+    c10::Event evt(at::kXPU);
+    evt.record(stream);
+    c10::Stream ccl_torch_stream = ccl_torch_streams[i];
+    evt.block(ccl_torch_stream);
   }
 }
 
@@ -164,23 +166,32 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   std::vector<c10::Stream> torch_streams;
   torch_streams.reserve(devices.size());
 
-  // Use the same queue for computation and communication.
-  // TODO: IPEX doesn't support multiple queue for now. Copy engine requires a dedicate queue
-  //  auto q = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index()).dpcpp_queue();
-  DPCPPStream dpcpp_stream = xpu::dpcpp::getDPCPPStreamFromPool(false, devices[0].index());
+  // Create the stream and rank dev mapping
+  for (size_t i = 0; i < devices.size(); i++) {
+    c10::impl::VirtualGuardImpl impl(devices[i].type());
+    // XPU doesn't support prioritized stream.
+    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+    torch_streams.push_back(stream);
+
+    DPCPPStream dpcpp_stream{stream};
+    auto q = dpcpp_stream.dpcpp_queue();
+    ccl_streams.push_back(ccl::create_stream(q));
+
+    int rank = local_base_rank + i;
+    devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+  }
+
+  // The IPEX use default global context.
+  // TODO: add get default global context API in IPEX.
+  DPCPPStream dpcpp_stream = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index());
   auto q = dpcpp_stream.dpcpp_queue();
-  ccl_streams.push_back(ccl::create_stream(q));
-  torch_streams.push_back(dpcpp_stream.unwrap());
-
-  int rank = local_base_rank;
-  devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
-
   auto ctx = ccl::create_context(q.get_context());
+
+  // Create ccl::communicators
   auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
 
-
-  std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
   // Store the comms to cache
+  std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
   pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);
 
   return *dpcpp_comms_ptr.get();
@@ -204,7 +215,6 @@ public:
 
   void run() override {
     const auto devices = get_device_list(this->inputs);
-
     // add SYCL running dependency computation -> communication.
     sync_streams(devices, this->comms.torch_streams);
 

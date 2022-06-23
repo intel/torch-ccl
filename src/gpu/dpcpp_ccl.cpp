@@ -74,8 +74,7 @@ void sync_streams(
         const std::vector<c10::Stream>& ccl_torch_streams) {
   for (const auto i : c10::irange(devices.size())) {
     c10::impl::VirtualGuardImpl impl(devices[i].type());
-    // XPU doesn't support prioritized stream.
-    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+    c10::Stream stream = impl.getStream(devices[i]);
     c10::Event evt(at::kXPU);
     evt.record(stream);
     c10::Stream ccl_torch_stream = ccl_torch_streams[i];

@@ -218,12 +218,14 @@ public:
 
   virtual ~CollectiveAsyncWorkCCL()
   {
+#if 0
     if (!rets.empty()) {
       std::cerr << "attempted destruction of WorkCCL before work has completed, "
                 << "waiting the request."
                 << std::endl;
       synchronize();
     }
+#endif
   }
 
   bool isCompleted() override {
@@ -285,8 +287,6 @@ public:
       std::this_thread::sleep_for(
               std::chrono::microseconds (kSynchronizeBusyWaitMicro));
     }
-
-    this->rets.clear();
   }
 
   void synchronize() override {

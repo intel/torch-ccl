@@ -233,9 +233,7 @@ public:
   };
 
   // No explicitly synchronization.
-  virtual ~XPUWorkCCL() {
-    this->rets.clear();
-  }
+  virtual ~XPUWorkCCL() {}
 
   // Waiting on the work's on XPU backend
   bool wait(std::chrono::milliseconds timeout) override {
@@ -254,26 +252,18 @@ private:
 
 };
 
-void execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work) {
-  try {
-    work->run();
-  } catch (...) {
-    work->finishAsyncWorkCCLError(std::current_exception());
-    return;
-  }
-
-  work->finishAsyncWorkCCL();
-}
-
 } //namespace anonymous
 
 class XPUCCLStubs final: public DispatchStub {
 
 public:
 
-  XPUCCLStubs() {}
+  XPUCCLStubs() {
+    stop_=false;
+    workerThread_ = std::thread(&XPUCCLStubs::runLoop, this);
+  }
 
-  ~XPUCCLStubs() {}
+  ~XPUCCLStubs() {destroy();}
 
 protected:
 
@@ -311,11 +301,17 @@ protected:
                                                                 std::vector<int64_t>& inputSplitSizes,
                                                                 const AllToAllOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
-
-  void reset() override {
-  }
-
+  void destroy();
+  void reset() override {}
+  void runLoop();
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work);
 private:
+  bool stop_;
+  std::mutex pgMutex_;
+  std::thread workerThread_;
+  std::deque<c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>> queue_;
+  std::condition_variable queueProduceCV_;
+  std::condition_variable queueConsumeCV_;
 };
 
 struct RegisterXPUMethods {
@@ -333,6 +329,67 @@ void checkGPUTensor(const at::Tensor& tensor)
 void checkGPUTensor(const std::vector<at::Tensor>& tensors)
 {
   checkGPUTensor(tensors[0]);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::execute(c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> & work){
+  try {
+    work->run();
+  } catch (...) {
+    work->finishAsyncWorkCCLError(std::current_exception());
+    return work;
+  }
+  // mark the work finished asynchronizely.
+  work->finishAsyncWorkCCL();
+
+  // Track the work internal
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  queue_.push_back(work);
+  lock.unlock();
+  queueProduceCV_.notify_one();
+
+  return work;
+}
+
+void XPUCCLStubs::destroy() {
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  queueConsumeCV_.wait(lock, [&] { return queue_.empty(); });
+
+  // Queue is empty, signal stop
+  stop_ = true;
+
+  // Release lock to allow threads to terminate
+  lock.unlock();
+  queueProduceCV_.notify_all();
+
+  // Join the single worker thread
+  workerThread_.join();
+}
+
+void XPUCCLStubs::runLoop() {
+  std::unique_lock<std::mutex> lock(pgMutex_);
+  while (!stop_) {
+    if (queue_.empty()) {
+      queueProduceCV_.wait(lock);
+      continue;
+    }
+
+    auto work = std::move(queue_.front());
+
+    queue_.pop_front();
+
+    lock.unlock();
+    queueConsumeCV_.notify_one();
+
+    try {
+      work->synchronize();
+//      work->finishAsyncWorkCCL();
+
+    } catch (...) {
+//      work->finishAsyncWorkCCLError(std::current_exception());
+    }
+
+    lock.lock();
+  }
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vector<at::Tensor>& tensors,

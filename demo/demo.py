@@ -40,7 +40,7 @@ if __name__ == "__main__":
     device = "xpu:0"
     model = Model().to(device)
     if dist.get_world_size() > 1:
-        model = DDP(model, device_ids=[device] if device is not 'cpu' else None)
+        model = DDP(model, device_ids=[device] if (device != 'cpu') else None)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     loss_fn = nn.MSELoss().to(device)

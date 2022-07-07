@@ -50,7 +50,7 @@ def create_version():
             version += '+' + sha[:7]
 
     if os.environ.get("COMPUTE_BACKEND") == "dpcpp":
-        backend = "xpu"
+        backend = "gpu"
     else:
         backend = os.environ.get("ONECCL_BINDINGS_FOR_PYTORCH_BACKEND", "cpu")
 

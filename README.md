@@ -10,6 +10,25 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 `oneccl_bindings_for_pytorch` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now.
 
+## Capability
+
+The table below shows which functions are available for use with CPU / Intel dGPU tensors.
+
+|                  | CPU   | GPU   |
+| :--------------- | :---: | :---: |
+| `send`           |       |       |
+| `recv`           |       |       |
+| `broadcast`      |       |       |
+| `all_reduce`     |       |       |
+| `reduce`         |       |       |
+| `all_gather`     |       |       |
+| `gather`         |       |       |
+| `scatter`        |       |       |
+| `reduce_scatter` |       |       |
+| `all_to_all`     |       |       |
+| `barrier`        |       |       |
+
+
 ## Pytorch API Align
 
 We recommend Anaconda as Python package management system. The following is the corresponding branches (tags) of `oneccl_bindings_for_pytorch` and supported Pytorch.

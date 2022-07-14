@@ -63,7 +63,7 @@ Wheel files are avaiable for the following Python versions.
 | 1.10.0            | √          | √          | √          | √          |             |
 
 ```bash
-python -m pip install  oneccl_bindings_for_pytorch==1.12.0 -f https://software.intel.com/ipex-whl-stable
+python -m pip install oneccl_bind_pt==1.12.0 -f https://developer.intel.com/ipex-whl-stable
 ```
 
 ## Usage

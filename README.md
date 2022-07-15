@@ -16,17 +16,17 @@ The table below shows which functions are available for use with CPU / Intel dGP
 
 |                  | CPU   | GPU   |
 | :--------------- | :---: | :---: |
-| `send`           |       |       |
-| `recv`           |       |       |
-| `broadcast`      |       |       |
-| `all_reduce`     |       |       |
-| `reduce`         |       |       |
-| `all_gather`     |       |       |
-| `gather`         |       |       |
-| `scatter`        |       |       |
-| `reduce_scatter` |       |       |
-| `all_to_all`     |       |       |
-| `barrier`        |       |       |
+| `send`           | ×     | ×     |
+| `recv`           | ×     | ×     |
+| `broadcast`      | √     | √     |
+| `all_reduce`     | √     | √     |
+| `reduce`         | √     | √     |
+| `all_gather`     | √     | √     |
+| `gather`         | √     | √     |
+| `scatter`        | ×     | ×     |
+| `reduce_scatter` | ×     | ×     |
+| `all_to_all`     | √     | √     |
+| `barrier`        | √     | √     |
 
 
 ## Pytorch API Align

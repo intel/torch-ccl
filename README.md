@@ -65,6 +65,7 @@ Wheel files are avaiable for the following Python versions.
 ```bash
 python -m pip install oneccl_bind_pt==1.12.0 -f https://developer.intel.com/ipex-whl-stable
 ```
+Note: oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
 
 ## Usage
 

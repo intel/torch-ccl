@@ -798,17 +798,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
               }
 
               ccl::event ret_evt;
-              CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(flatInput.scalar_type(), "xpu::alltoall", [&] {
-                  call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                      CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(flatInput.data_ptr<scalar_t>(),
-                                                         sendCounts,
-                                                         flatOutput.data_ptr<scalar_t>(),
-                                                         recvCounts,
-                                                         cclDatatypes.at(flatOutput.scalar_type()),
-                                                         comm,
-                                                         stream), stream.get_native());
-                  });
-
+              call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                  CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(flatInput.data_ptr(),
+                                                     sendCounts,
+                                                     flatOutput.data_ptr(),
+                                                     recvCounts,
+                                                     cclDatatypes.at(flatOutput.scalar_type()),
+                                                     comm,
+                                                     stream), stream.get_native());
               });
 
               if (!isOutputFlat) {

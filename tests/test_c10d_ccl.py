@@ -297,6 +297,70 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_allgather_basics_multi_xpu(self):
         self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
+    def _test_allgather_base_ops(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def allgather_base(output_t, input_t):
+            work = pg._allgather_base(output_t, input_t)
+            work.wait()
+
+        tensor = fn(torch.tensor([self.rank]))
+        output_t = fn(torch.empty((self.world_size), dtype=tensor.dtype))
+
+        allgather_base(output_t, tensor)
+
+        # Verification
+        self.assertEqual(torch.arange(self.world_size), output_t)
+
+    def test_allgather_base_ops(self):
+        self._test_allgather_base_ops(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_allgather_base_ops_xpu(self):
+        self._test_allgather_base_ops(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_allgather_basics_multi_xpu(self):
+        self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+
+    def _test_allgather_base_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def allgather_base(output_t, input_t):
+            work = pg._allgather_base(output_t, input_t)
+            work.wait()
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "output tensor size must be equal to world_size times input tensor size",
+        ):
+            tensor = fn(torch.tensor([self.rank]))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=tensor.dtype))
+            # fails the check because output_t is not correctly sized
+            allgather_base(output_t, tensor)
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError, "Tensors are not equal in data type"
+        ):
+            tensor = fn(torch.tensor([self.rank], dtype=torch.float))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=torch.long))
+            # fails the check because the dtype is different
+            allgather_base(output_t, tensor)
+
+    def test_allgather_base_basics(self):
+        self._test_allgather_base_basics(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_allgather_base_basics_xpu(self):
+        self._test_allgather_base_basics(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_allgather_base_basics_multi_xpu(self):
+        self._test_allgather_base_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     # alltoall_base
     def _test_alltoall_base_equal_split_helper(self, fn):

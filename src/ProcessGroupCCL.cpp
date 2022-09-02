@@ -240,11 +240,17 @@ c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather(
 }
 
 c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::_allgather_base(
-      at::Tensor& outputBuffer,
-      at::Tensor& inputBuffer,
-      const AllgatherOptions& /* unused */)
+      at::Tensor& outputTensor,
+      at::Tensor& inputTensor,
+      const AllgatherOptions& opts)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support _allgather_base");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensor);
+  format_tensors_param(tensor_param, outputTensor);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::_allgather_base", tensor_param);
+
+  auto work = DispatchStub::_allgather_base(outputTensor, inputTensor, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<ProcessGroup::Work> ProcessGroupCCL::allgather_coalesced(

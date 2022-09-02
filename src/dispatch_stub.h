@@ -63,7 +63,13 @@ public:
                                                                   std::vector<at::Tensor>& inputTensors,
                                                                   const AllgatherOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl);
-   
+
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base(
+                                                                at::Tensor& outputBuffer,
+                                                                at::Tensor& inputBuffer,
+                                                                const AllgatherOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl);
+
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                std::vector<at::Tensor>& inputTensors,
                                                                const GatherOptions& opts,
@@ -113,6 +119,15 @@ public:
 
     fail(inputTensors[0].device().type(), "allgather");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
+                                                                        at::Tensor& inputTensor,
+                                                                        const AllgatherOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl)  {
+
+      fail(inputTensor.device().type(), "_allgather_base");
+      return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
 
   virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,

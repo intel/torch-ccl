@@ -134,6 +134,11 @@ protected:
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                          at::Tensor& inputTensor,
+                                                                          const ReduceScatterOptions& opts,
+                                                                          ProcessGroupCCL& pg_ccl) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg) override;
@@ -142,6 +147,11 @@ protected:
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
+                                                                     at::Tensor& inputTensor,
+                                                                     const AllgatherOptions& opts,
+                                                                     ProcessGroupCCL& pg_ccl) override;
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
@@ -337,6 +347,51 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vecto
   return work;
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                                     at::Tensor& inputTensor,
+                                                                                     const ReduceScatterOptions& opts,
+                                                                                     ProcessGroupCCL& pg_ccl) {
+  const int world_size = pg_ccl.getSize();
+  if (inputTensor.numel() != outputTensor.numel() * world_size) {
+    TORCH_CHECK(
+            false,
+            "input tensor must be the same size as output size times world size");
+  }
+
+  // just a wrapper to fit the collective interface
+  auto inputs = std::vector<at::Tensor> {inputTensor};
+  auto outputs = std::vector<at::Tensor> {outputTensor};
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, CPUWorkCCL>(
+          pg_ccl,
+          inputs,
+          outputs,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::reduce_attr attr,
+              ccl::communicator& comm) {
+
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+                                                      output.data_ptr(),
+                                                      (size_t) output.numel(),
+                                                      cclDatatypes.at(input.scalar_type()),
+                                                      cclOps.at(opts.reduceOp),
+                                                      comm));
+            });
+            return ret_evt;
+
+          },
+          c10d::OpType::_REDUCE_SCATTER_BASE,
+          "oneccl_bindings_for_pytorch::cpu_work::_reduce_scatter_base");
+
+  work->debugName = std::string("cpu::_reduce_scatter_base");
+  enqueue(work);
+  return work;
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::broadcast_(std::vector<at::Tensor>& tensors,
                                                                       const BroadcastOptions &opts,
                                                                       ProcessGroupCCL& pg) {
@@ -434,6 +489,51 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::ve
     "oneccl_bindings_for_pytorch::cpu_work::allgather");
 
   work->debugName = std::string("cpu::allgather");
+  enqueue(work);
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_allgather_base_(at::Tensor& outputTensor,
+                                                                               at::Tensor& inputTensor,
+                                                                               const AllgatherOptions& opts,
+                                                                               ProcessGroupCCL& pg_ccl) {
+  const int world_size = pg_ccl.getSize();
+  if (inputTensor.numel() * world_size != outputTensor.numel()) {
+    TORCH_CHECK(false, "output tensor size must be equal to world_size times input tensor size");
+  }
+
+  // just a wrapper to fit the collective interface
+  auto inputs = std::vector<at::Tensor> {inputTensor};
+  auto outputs = std::vector<at::Tensor> {outputTensor};
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, CPUWorkCCL>(
+          pg_ccl,
+          inputs,
+          outputs,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allgatherv_attr attr,
+              ccl::communicator& comm) {
+            RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::_allgather_base", std::vector<c10::IValue>({input}));
+
+            std::vector<size_t> recvCounts(world_size, input.numel());
+
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                                  (size_t) input.numel(),
+                                                  output.data_ptr(),
+                                                  recvCounts,
+                                                  cclDatatypes.at(input.scalar_type()),
+                                                  comm,
+                                                  attr));
+            });
+            return ret_evt;
+          },
+          c10d::OpType::_ALLGATHER_BASE);
+
+  work->debugName = std::string("cpu::_allgather_base");
   enqueue(work);
   return work;
 }
@@ -713,17 +813,29 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::barrier_(const Bar
                                                                    ProcessGroupCCL& pg) {
 
   c10::intrusive_ptr<AsyncBarrierWork> work = c10::make_intrusive<AsyncBarrierWork>();
+
+  if (pg.ccl_member_->ccl_comms.size() == 0) {
+    std::vector<at::Device> cpu_devices{at::Device("cpu")};
+    const auto key = get_key_from_devs(cpu_devices);
+    get_ccl_comms(pg, key, cpu_devices);
+  }
+
   auto& comms_map = pg.ccl_member_->ccl_comms;
   for(auto iter = comms_map.begin(); iter != comms_map.end(); iter++){
       for(size_t i =0 ; i < iter->second->comms.size(); i++){
          work->getEvents().emplace_back(
                  call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                  CCL_CHECK(return ccl::barrier(iter->second->comms[i]););
+                   if (i < iter->second->streams.size()) {
+                     CCL_CHECK(return ccl::barrier(iter->second->comms[i],
+                                                   iter->second->streams[i]););
+                   } else {
+                     CCL_CHECK(return ccl::barrier(iter->second->comms[i]););
+                   }
                  })
                  );
      }
   }
-  return work; 
+  return work;
 }
 
 

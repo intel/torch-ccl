@@ -35,7 +35,14 @@
 #include <thread>
 #include <ATen/detail/FunctionTraits.h>
 #include <ATen/record_function.h>
+
+#include <torch/version.h>
+#if TORCH_VERSION_MINOR >= 13
 #include <torch/csrc/distributed/c10d/Types.hpp>
+#else
+#include <c10d/Types.hpp>
+#endif
+
 #include <ccl_comm_collector.h>
 #include "ProcessGroupCCL.hpp"
 
@@ -52,6 +59,7 @@ constexpr uint64_t kSynchronizeBusyWaitMicro = 10; // 50us
       throw e;                                                       \
     }                                                                \
   }while(0)
+
 
 #define CCL_DISPATCH_INTEGRAL_FLOATS_TYPES(TYPE, NAME, ...)                          \
   [&] {                                                                      \
@@ -210,19 +218,27 @@ public:
                          f(f), comms(comms), attr(attr), inputs(inputs), opTimeout_(timeout) {}
 
   void run() override {
-    using Indices = std::make_index_sequence<num_params - 4>;
-    workStartTime_ = std::chrono::steady_clock::now();
-    run_wrap_(Indices{});
+    if constexpr (num_params == 6) {
+        workStartTime_ = std::chrono::steady_clock::now();
+        run_wrap_();
+    }
+    else{
+        using Indices = std::make_index_sequence<num_params - 4>;
+        workStartTime_ = std::chrono::steady_clock::now();
+        run_wrap_(Indices{});
+    }
   };
 
   virtual ~CollectiveAsyncWorkCCL()
   {
+#if 0
     if (!rets.empty()) {
       std::cerr << "attempted destruction of WorkCCL before work has completed, "
                 << "waiting the request."
                 << std::endl;
       synchronize();
     }
+#endif
   }
 
   bool isCompleted() override {
@@ -284,8 +300,6 @@ public:
       std::this_thread::sleep_for(
               std::chrono::microseconds (kSynchronizeBusyWaitMicro));
     }
-
-    this->rets.clear();
   }
 
   void synchronize() override {
@@ -323,6 +337,33 @@ protected:
       // add warning for re run the ccl work
     }
   }
+
+    template <typename T = OutputType>
+    typename std::enable_if<is_vector<T>::value, void>::type run_wrap_() {
+    if (rets.empty()) {
+      auto& outputs = outputTensors_;
+      for (size_t i = 0; i < inputs.size(); i++) {
+        CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i], comms.torch_streams[i])));
+      }
+    }
+    else {
+      // add warning for re run the ccl work
+    }
+  }
+
+  template <typename T = OutputType>
+  typename std::enable_if<!is_vector<T>::value, void>::type run_wrap_() {
+    if (rets.empty()) {
+      auto& outputs = outputTensors_[0];
+      for (size_t i = 0; i < inputs.size(); i++) {
+        CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i], comms.torch_streams[i])));
+      }
+    }
+    else {
+      // add warning for re run the ccl work
+    }
+  }
+
 
   template <typename R, std::enable_if_t<is_tuple<R>::value, bool> = true>
   ccl::event& get_event_from_ret_(R& ret)
@@ -376,7 +417,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   pre_process pre,
   post_process post,
   c10d::OpType op_type,
-  const char* prof_title) {
+  const char* prof_title = nullptr) {
   using traits = function_traits<fn>;
   using attr_t = typename traits::template arg<2>::type;
   attr_t attr = ccl::create_operation_attr<attr_t>();
@@ -399,7 +440,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   std::vector<output_t>& outputs,
   fn fun,
   c10d::OpType op_type,
-  const char* prof_title) {
+  const char* prof_title = nullptr) {
   return collective<get_ccl_fn, WorkCCL>(
     pg_ccl,
     inputs,

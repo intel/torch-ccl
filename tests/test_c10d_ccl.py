@@ -297,6 +297,70 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_allgather_basics_multi_xpu(self):
         self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
+    def _test_allgather_base_ops(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def allgather_base(output_t, input_t):
+            work = pg._allgather_base(output_t, input_t)
+            work.wait()
+
+        tensor = fn(torch.tensor([self.rank]))
+        output_t = fn(torch.empty((self.world_size), dtype=tensor.dtype))
+
+        allgather_base(output_t, tensor)
+
+        # Verification
+        self.assertEqual(torch.arange(self.world_size), output_t)
+
+    def test_allgather_base_ops(self):
+        self._test_allgather_base_ops(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_allgather_base_ops_xpu(self):
+        self._test_allgather_base_ops(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_allgather_basics_multi_xpu(self):
+        self._test_allgather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+
+    def _test_allgather_base_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def allgather_base(output_t, input_t):
+            work = pg._allgather_base(output_t, input_t)
+            work.wait()
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "output tensor size must be equal to world_size times input tensor size",
+        ):
+            tensor = fn(torch.tensor([self.rank]))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=tensor.dtype))
+            # fails the check because output_t is not correctly sized
+            allgather_base(output_t, tensor)
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError, "Tensors are not equal in data type"
+        ):
+            tensor = fn(torch.tensor([self.rank], dtype=torch.float))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=torch.long))
+            # fails the check because the dtype is different
+            allgather_base(output_t, tensor)
+
+    def test_allgather_base_basics(self):
+        self._test_allgather_base_basics(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_allgather_base_basics_xpu(self):
+        self._test_allgather_base_basics(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_allgather_base_basics_multi_xpu(self):
+        self._test_allgather_base_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
     # alltoall_base
     def _test_alltoall_base_equal_split_helper(self, fn):
@@ -387,6 +451,72 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     def test_alltoall_basics_multi_xpu(self):
         self._test_all_to_all_helper(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
+    def _test_reduce_scatter_base_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def reduce_scatter_base(output_t, input_t):
+            work = pg._reduce_scatter_base(output_t, input_t)
+            work.wait()
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "input tensor must be the same size as output size times world size",
+        ):
+            input_t = fn(torch.tensor([self.rank]))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=input_t.dtype))
+            # fails the check because output_t is not correctly sized
+            reduce_scatter_base(output_t, input_t)
+
+        # anticpate an error
+        with self.assertRaisesRegex(
+                RuntimeError, "Tensors are not equal in data type"
+        ):
+            tensor = fn(torch.tensor([self.rank], dtype=torch.float))
+            output_t = fn(torch.empty((self.world_size + 1), dtype=torch.long))
+            # fails the check because the dtype is different
+            reduce_scatter_base(output_t, tensor)
+
+    def test_reduce_scatter_base_basics(self):
+        self._test_reduce_scatter_base_basics(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_reduce_scatter_base_basics_xpu(self):
+        self._test_reduce_scatter_base_basics(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_reduce_scatter_base_basics_multi_xpu(self):
+        self._test_reduce_scatter_base_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+
+    def _test_reduce_scatter_base_ops(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def reduce_scatter_base(output_t, input_t):
+            work = pg._reduce_scatter_base(output_t, input_t)
+            work.wait()
+
+        # reduce_scatter_base is GPU number agnostic.
+        # Each rank contribute one tensor regardless of GPU counts
+        output_t = fn(torch.empty([1]))
+        tensor = fn(torch.arange(self.world_size, dtype=output_t.dtype))
+
+        reduce_scatter_base(output_t, tensor)
+
+        # Verification
+        self.assertEqual(output_t[0], self.rank * self.world_size)
+
+    def test_reduce_scatter_base(self):
+        self._test_reduce_scatter_base_ops(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_reduce_scatter_base_xpu(self):
+        self._test_reduce_scatter_base_ops(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_reduce_scatter_base_multi_xpu(self):
+        self._test_reduce_scatter_base_ops(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
 
 if __name__ == '__main__':
     run_tests()

@@ -49,8 +49,8 @@ def create_version():
         if sha != 'Unknown':
             version += '+' + sha[:7]
 
-    if os.environ.get("COMPUTE_BACKEND") == "dpcpp_level_zero":
-        backend = "xpu"
+    if os.environ.get("COMPUTE_BACKEND") == "dpcpp":
+        backend = "gpu"
     else:
         backend = os.environ.get("ONECCL_BINDINGS_FOR_PYTORCH_BACKEND", "cpu")
 
@@ -78,12 +78,6 @@ class BuildCMakeExt(BuildExtension):
         """
         cmake_extensions = [ext for ext in self.extensions if isinstance(ext, CMakeExtension)]
         for ext in cmake_extensions:
-            try:
-                # temp patch the oneCCL code
-                check_call(["git", "apply", "./patches/Update_oneCCL.patch"], cwd=CWD)
-            except:
-                # ignore patch fail
-                pass
             self.build_cmake(ext)
 
         self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
@@ -123,7 +117,7 @@ class BuildCMakeExt(BuildExtension):
 
         runtime = 'gcc'
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
                 runtime = 'dpcpp'
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
                 import intel_extension_for_pytorch
@@ -138,7 +132,7 @@ class BuildCMakeExt(BuildExtension):
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'oneccl_bindings_for_pytorch'] + build_args, cwd=str(build_dir))
         if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp_level_zero':
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
                 check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
@@ -147,14 +141,6 @@ class Clean(clean):
     def run(self):
         import glob
         import re
-
-        if os.path.isfile(os.path.join(CWD, "third_party/oneCCL", "README.md")):
-            try:
-                check_call(["git", "reset", "--hard"], cwd=os.path.join(CWD, "third_party/oneCCL"))
-            except Exception as e:
-                print("=" * 64 + "\nWARNNING!\n" + "=" * 64)
-                print(e)
-                print("=" * 64)
 
         with open('.gitignore', 'r') as f:
             ignores = f.read()

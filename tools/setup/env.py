@@ -10,11 +10,16 @@ BUILD_DIR = 'build'
 
 def get_compiler(runtime):
     if runtime == 'dpcpp':
-        cc = shutil.which('icx')
-        cpp = shutil.which('dpcpp')
+        c_compiler = 'icx'
+        cpp_compiler = 'icpx'
     else:
-        cc = shutil.which('cc')
-        cpp = shutil.which('c++')
+        c_compiler = 'cc'
+        cpp_compiler = 'c++'
+
+    cc = shutil.which(c_compiler)
+    cpp = shutil.which(cpp_compiler)
+    if cpp is None or cc is None:
+        raise RuntimeError("couldn't find the compiler '{}' or '{}'".format(c_compiler, cpp_compiler))
     return cc, cpp
 
 

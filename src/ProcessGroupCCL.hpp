@@ -38,10 +38,18 @@
 #include <vector>
 
 #include <torch/version.h>
+#if TORCH_VERSION_MINOR >= 13
 #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 #include <torch/csrc/distributed/c10d/Store.hpp>
 #include <torch/csrc/distributed/c10d/Types.hpp>
 #include <torch/csrc/distributed/c10d/Utils.hpp>
+#else
+#include <c10d/ProcessGroup.hpp>
+#include <c10d/Store.hpp>
+#include <c10d/Types.hpp>
+#include <c10d/Utils.hpp>
+#endif
+
 
 namespace oneccl_bindings_for_pytorch {
 struct CCLCommCollector;
@@ -94,15 +102,15 @@ public:
 
     std::vector<at::Tensor> result() override;
 
-    void finishAsyncWorkCCL();
+    virtual void finishAsyncWorkCCL();
 
     void finishAsyncWorkCCLError(std::exception_ptr eptr);
 
-  protected:
-    friend class ProcessGroupCCL;
-
   public:
     std::string debugName;
+
+  protected:
+    friend class ProcessGroupCCL;
     const std::vector<std::vector<at::Tensor>> outputTensors_;
     // The future returned by getFuture.
     c10::intrusive_ptr<at::ivalue::Future> future_;
@@ -166,6 +174,11 @@ public:
       std::vector<at::Tensor>& outputTensors,
       std::vector<std::vector<at::Tensor>>& inputTensors,
       const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
+
+  c10::intrusive_ptr<C10D_Work> _reduce_scatter_base(
+          at::Tensor& outputBuffer,
+          at::Tensor& inputBuffer,
+          const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
 
   c10::intrusive_ptr<C10D_Work> alltoall_base(
       at::Tensor& outputTensor,

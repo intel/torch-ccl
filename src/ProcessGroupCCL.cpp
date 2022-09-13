@@ -92,12 +92,13 @@ ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>>
 // Profiler: Pass nullptr as profilingTitle to parent constructor to
 // replace default profiler implementation with async version that reports
 // correct timestamps for work that is asynchronously executed.
-        : C10D_Work(rank, opType, profilingTitle, inputTensors),
+        : C10D_Work(rank, opType, nullptr, inputTensors),
           outputTensors_(std::move(outputTensors)),
           future_(createFutureAsOutput(outputTensors)) {
-//  if (profilingTitle != nullptr) {
+  if (profilingTitle != nullptr) {
 //    recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
-//  }
+    // TODO: for cpu async profiling repot.
+  }
 }
 
 c10::intrusive_ptr<c10::ivalue::Future> ProcessGroupCCL::AsyncWorkCCL::getFuture() {
@@ -243,7 +244,13 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::_allgather_base(
       at::Tensor& inputTensor,
       const AllgatherOptions& opts)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support _allgather_base");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensor);
+  format_tensors_param(tensor_param, outputTensor);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::_allgather_base", tensor_param);
+
+  auto work = DispatchStub::_allgather_base(outputTensor, inputTensor, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::allgather_coalesced(
@@ -288,6 +295,20 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::reduce_scatter(
     const ReduceScatterOptions& /* unused */)
 {
   TORCH_CHECK(false, "ProcessGroupCCL does not support reduce_scatter");
+}
+
+
+c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::_reduce_scatter_base(
+        at::Tensor& outputTensor,
+        at::Tensor& inputTensor,
+        const ReduceScatterOptions& opts) {
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensor);
+  format_tensors_param(tensor_param, outputTensor);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::_reduce_scatter_base", tensor_param);
+
+  auto work = DispatchStub::_reduce_scatter_base(outputTensor, inputTensor, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::alltoall_base(

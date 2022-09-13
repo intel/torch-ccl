@@ -8,7 +8,7 @@ target_compile_options(oneccl_bindings_for_pytorch PUBLIC -Wall
         -Wno-sign-compare
         -Wno-unused-function)
 
-if(COMPUTE_BACKEND STREQUAL "dpcpp_level_zero")
+if(COMPUTE_BACKEND STREQUAL "dpcpp")
     add_subdirectory(./gpu)
 endif()
 

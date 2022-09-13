@@ -10,6 +10,25 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 `oneccl_bindings_for_pytorch` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now.
 
+## Capability
+
+The table below shows which functions are available for use with CPU / Intel dGPU tensors.
+
+|                  | CPU   | GPU   |
+| :--------------- | :---: | :---: |
+| `send`           | ×     | ×     |
+| `recv`           | ×     | ×     |
+| `broadcast`      | √     | √     |
+| `all_reduce`     | √     | √     |
+| `reduce`         | √     | √     |
+| `all_gather`     | √     | √     |
+| `gather`         | √     | √     |
+| `scatter`        | ×     | ×     |
+| `reduce_scatter` | ×     | ×     |
+| `all_to_all`     | √     | √     |
+| `barrier`        | √     | √     |
+
+
 ## Pytorch API Align
 
 We recommend Anaconda as Python package management system. The following is the corresponding branches (tags) of `oneccl_bindings_for_pytorch` and supported Pytorch.
@@ -36,6 +55,26 @@ The usage details can be found in the README of corresponding branch. The follow
 
 - PyTorch v1.13.0
 
+## Build Option List
+
+The following build options are supported in Intel® oneCCL Bindings for PyTorch*.
+
+| Build Option                        | Default Value  | Description                                                                                         |
+| :---------------------------------: | :------------: | :-------------------------------------------------------------------------------------------------: |
+| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
+| CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
+| ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
+| CCL_SHA_VERSION                     | False          |add git head sha version to Wheel name                                                               |
+
+## Lunch Option List
+
+The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
+
+| Lunch Option                             | Default Value | Description                                                           |
+| :--------------------------------------: | :-----------: | :-------------------------------------------------------------------: |
+| ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
+| ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |
+
 ## Installation
 
 ### Install from Source
@@ -51,7 +90,10 @@ The usage details can be found in the README of corresponding branch. The follow
 2. Install `oneccl_bindings_for_pytorch`
 
    ```bash
+   # for CPU Backend Only
    python setup.py install
+   # use DPC++ Compiler to enable support for Intel XPU
+   COMPUTE_BACKEND=dpcpp python setup.py install
    ```
 
 ### Install PreBuilt Wheel
@@ -69,6 +111,7 @@ Wheel files are avaiable for the following Python versions.
 ```bash
 python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
+
 ## Usage
 
 example.py

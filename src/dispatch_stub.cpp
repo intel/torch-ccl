@@ -133,6 +133,23 @@ protected:
     return work;
   }
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
+                                                                at::Tensor& inputTensor,
+                                                                const AllgatherOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl) {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::_allgather_base: ";
+    format_pg_rank(os, pg_ccl);
+    os << " input ";
+    format_tensors_size(os, inputTensor);
+    os << " output ";
+    format_tensors_size(os, outputTensor);
+    std::cout << os.str() << std::endl;
+
+    auto work = hdlr->_allgather_base_(outputTensor, inputTensor, opts, pg_ccl);
+    return work;                                                              
+  }
+  
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> scatter_(std::vector<at::Tensor>& outputTensors,
                                                           std::vector<std::vector<at::Tensor>>& inputTensors,
                                                           const ScatterOptions& opts,

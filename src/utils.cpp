@@ -43,16 +43,17 @@ std::map<c10d::ReduceOp, ccl::reduction> cclOps =
     {ReduceOp::PRODUCT, ccl::reduction::prod},
   };
 
-
 std::map<at::ScalarType, ccl::datatype> cclDatatypes =
   {
     {at::kByte, ccl::datatype::uint8},
-    {at::kChar, ccl::datatype::uint8},
+    {at::kChar, ccl::datatype::int8},
+    {at::kShort, ccl::datatype::int16},
+    {at::kInt, ccl::datatype::int32},
+    {at::kLong, ccl::datatype::int64},
+    {at::kHalf, ccl::datatype::float16},
+    {at::kFloat, ccl::datatype::float32},
     {at::kDouble, ccl::datatype::float64},
     {at::kBFloat16, ccl::datatype::bfloat16},
-    {at::kFloat, ccl::datatype::float32},
-    {at::kInt, ccl::datatype::int32},
-    {at::kLong, ccl::datatype::int64}
   };
 
 // Get the key from the list of devices

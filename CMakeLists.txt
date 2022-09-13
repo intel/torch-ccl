@@ -23,6 +23,8 @@ set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY true)
 
 option(USE_SYSTEM_ONECCL "Use oneCCL library in system" OFF)
 
+option(BUILD_NO_ONECCL_PACKAGE "Build with oneCCL excluded" OFF)
+
 # Find the Torch lib
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")

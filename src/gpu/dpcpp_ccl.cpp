@@ -276,6 +276,11 @@ protected:
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                          at::Tensor& inputTensor,
+                                                                          const ReduceScatterOptions& opts,
+                                                                          ProcessGroupCCL& pg_ccl) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
@@ -306,6 +311,7 @@ protected:
                                                                 std::vector<int64_t>& inputSplitSizes,
                                                                 const AllToAllOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
+
   void destroy();
   void reset() override {}
   void runLoop();
@@ -473,6 +479,56 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
   return work;
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                        at::Tensor& inputTensor,
+                                                                        const ReduceScatterOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl) {
+
+  checkGPUTensor({outputTensor, inputTensor});
+  const int world_size = pg_ccl.getSize();
+  if (inputTensor.numel() != outputTensor.numel() * world_size) {
+    TORCH_CHECK(
+            false,
+            "input tensor must be the same size as output size times world size");
+  }
+
+  // just a wrapper to fit the collective interface
+  auto inputs = std::vector<at::Tensor> {inputTensor};
+  auto outputs = std::vector<at::Tensor> {outputTensor};
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+          pg_ccl,
+          inputs,
+          outputs,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::reduce_attr attr,
+              ccl::communicator& comm,
+              ccl::stream& stream) {
+            RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::_reduce_scatter_base", std::vector<c10::IValue>{input});
+
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_KERNEL_SUBMIT(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+                                                      output.data_ptr(),
+                                                      (size_t) output.numel(),
+                                                      cclDatatypes.at(input.scalar_type()),
+                                                      cclOps.at(opts.reduceOp),
+                                                      comm,
+                                                      stream), stream.get_native());
+            });
+            return ret_evt;
+
+          },
+          c10d::OpType::_REDUCE_SCATTER_BASE);
+
+  work->debugName = std::string("xpu::_reduce_scatter_base");
+  execute(work);
+
+  return work;
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vector<at::Tensor>& tensors,
                                                                        const BroadcastOptions &opts,
                                                                        ProcessGroupCCL& pg_ccl) {
@@ -602,7 +658,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_allgather_base_(
             });
             return ret_evt;
           },
-          c10d::OpType::ALLGATHER);
+          c10d::OpType::_ALLGATHER_BASE);
 
   work->debugName = std::string("xpu::_allgather_base_");
   execute(work);

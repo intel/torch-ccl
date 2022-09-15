@@ -153,7 +153,7 @@ protected:
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
                                                                 at::Tensor& inputTensor,
                                                                 const AllgatherOptions& opts,
-                                                                ProcessGroupCCL& pg_ccl) {
+                                                                ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::_allgather_base: ";
     format_pg_rank(os, pg_ccl);

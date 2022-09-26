@@ -21,6 +21,12 @@ from tools.setup.env import get_compiler
 CWD = os.path.dirname(os.path.abspath(__file__))
 ONECCL_BINDINGS_FOR_PYTORCH_PATH = os.path.join(CWD, "oneccl_bindings_for_pytorch")
 
+try:
+    import intel_extension_for_pytorch
+    BUILD_WITH_IPEX = True
+except ImportError:
+    # ignore the ipex
+    BUILD_WITH_IPEX = False
 
 def _check_env_flag(name, default=''):
     return os.getenv(name, default).upper() in ['ON', '1', 'YES', 'TRUE', 'Y']
@@ -49,7 +55,7 @@ def create_version():
         if sha != 'Unknown':
             version += '+' + sha[:7]
 
-    if os.environ.get("COMPUTE_BACKEND") == "dpcpp":
+    if BUILD_WITH_IPEX:
         backend = "gpu"
     else:
         backend = os.environ.get("ONECCL_BINDINGS_FOR_PYTORCH_BACKEND", "cpu")
@@ -115,15 +121,13 @@ class BuildCMakeExt(BuildExtension):
             'BUILD_FT': 'OFF'
         }
 
-        runtime = 'gcc'
-        if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
-                runtime = 'dpcpp'
-                build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                import intel_extension_for_pytorch
-                build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
+        compiler = 'gcc'
+        if BUILD_WITH_IPEX:
+            build_options['COMPUTE_BACKEND'] = 'dpcpp'
+            build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
+            compiler = 'dpcpp'
 
-        cc, cxx = get_compiler(runtime)
+        cc, cxx = get_compiler(compiler)
         build_options['CMAKE_C_COMPILER'] = cc
         build_options['CMAKE_CXX_COMPILER'] = cxx
 
@@ -131,9 +135,8 @@ class BuildCMakeExt(BuildExtension):
 
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'oneccl_bindings_for_pytorch'] + build_args, cwd=str(build_dir))
-        if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
-                check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
+        if BUILD_WITH_IPEX:
+            check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
 

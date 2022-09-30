@@ -37,17 +37,17 @@
 
 
 #define CCL_KERNEL_SUBMIT(cmd, q) \
-({bool profile_barrier = (is_profiler_enabled());                               \
+({bool profile_barrier = (xpu::is_profiler_enabled());                        \
     sycl::event start_evt;                                                    \
     if (profile_barrier) {                                                    \
-      start_evt = xpu::dpcpp::queue_barrier((q));                               \
+      start_evt = q.ext_oneapi_submit_barrier();                              \
     }                                                                         \
     CCL_CHECK(cmd);                                                    \
                                                                               \
     sycl::event end_evt;                                                      \
     if (profile_barrier) {                                                    \
-      end_evt = xpu::dpcpp::queue_barrier((q));                                 \
-      dpcpp_log("oneccl", start_evt, end_evt);                                   \
+      end_evt = q.ext_oneapi_submit_barrier();                                \
+      xpu::profiler_record("oneccl", start_evt, end_evt);                     \
     }                          \
     })
 
@@ -98,7 +98,9 @@ c10::DeviceType check_tensors_properties(const std::vector<at::Tensor>& tensors)
   if (tensors.size() == 0) {
     throw std::runtime_error("Tensor list must be nonempty");
   }
-  auto device_count = xpu::dpcpp::device_count();
+  c10::Device device = tensors.front().device();
+  c10::impl::VirtualGuardImpl impl(device.type());
+  auto device_count = impl.deviceCount();
   if (tensors.size() > static_cast<size_t>(device_count)) {
     throw std::runtime_error(
       "Tensor list mustn't be larger than the number of available GPUs");
@@ -172,8 +174,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
     torch_streams.push_back(stream);
 
-    DPCPPStream dpcpp_stream{stream};
-    auto q = dpcpp_stream.dpcpp_queue();
+    auto q = xpu::get_queue_from_stream(stream);
     ccl_streams.push_back(ccl::create_stream(q));
 
     int rank = local_base_rank + i;
@@ -182,8 +183,9 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
 
   // The IPEX use default global context.
   // TODO: add get default global context API in IPEX.
-  DPCPPStream dpcpp_stream = xpu::dpcpp::getCurrentDPCPPStream(devices[0].index());
-  auto q = dpcpp_stream.dpcpp_queue();
+  c10::impl::VirtualGuardImpl impl(devices[0].type());
+  c10::Stream dpcpp_stream = impl.getStream(devices[0]);
+  auto q = xpu::get_queue_from_stream(dpcpp_stream);
   auto ctx = ccl::create_context(q.get_context());
 
   // Create ccl::communicators

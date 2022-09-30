@@ -17,6 +17,7 @@ We recommend Anaconda as Python package management system. The following is the 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
+   | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
    | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
    | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)   |
    | [v1.11.0](https://github.com/pytorch/pytorch/tree/v1.11.0)      |  [ccl_torch1.11](https://github.com/intel/torch-ccl/tree/ccl_torch1.11)   |
@@ -33,7 +34,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 - Python 3.6 or later and a C++17 compiler
 
-- PyTorch v1.12.0
+- PyTorch v1.13.0
 
 ## Installation
 
@@ -59,13 +60,14 @@ Wheel files are avaiable for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
+| 1.13              |            | √          | √          | √          | √           |
 | 1.12.100          |            | √          | √          | √          | √           |
 | 1.12.0            |            | √          | √          | √          | √           |
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==1.12.100 -f https://developer.intel.com/ipex-whl-stable
+python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable
 ```
 ## Usage
 

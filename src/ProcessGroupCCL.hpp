@@ -63,8 +63,7 @@ namespace c10d {
 #if TORCH_VERSION_MINOR >= 13
 using C10D_Work = c10d::Work;
 #else
-//using C10D_Work = c10d::ProcessGroup::Work;
-using C10D_Work = c10d::Work;
+using C10D_Work = c10d::ProcessGroup::Work;
 #endif
 
 // WorkCCL is the state associated with a CCL operarion.

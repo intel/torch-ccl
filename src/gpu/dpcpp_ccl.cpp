@@ -877,7 +877,10 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
               std::vector<at::Tensor> outputs,
               ccl::alltoallv_attr attr,
               ccl::communicator& comm,
-              ccl::stream& stream) {
+              ccl::stream& stream,
+              c10::Stream& torch_stream) {
+
+              c10::OptionalStreamGuard stream_guard(torch_stream);
 
               at::Tensor flatInput;
               at::Tensor flatOutput;

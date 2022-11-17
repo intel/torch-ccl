@@ -35,12 +35,19 @@
 #include <thread>
 #include <ATen/detail/FunctionTraits.h>
 #include <ATen/record_function.h>
+
+#include <torch/version.h>
+#if TORCH_VERSION_MINOR >= 13
+#include <torch/csrc/distributed/c10d/Types.hpp>
+#else
 #include <c10d/Types.hpp>
+#endif
+
 #include <ccl_comm_collector.h>
 #include "ProcessGroupCCL.hpp"
 
 
-constexpr uint64_t kSynchronizeBusyWaitMicro = 50; // 50us
+constexpr uint64_t kSynchronizeBusyWaitMicro = 10; // 50us
 
 #define CCL_CHECK(cmd)                                               \
   do {                                                               \

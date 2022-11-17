@@ -42,10 +42,19 @@
 #include <pybind11/chrono.h>
 #include <pybind11/cast.h>
 
+#include <torch/version.h>
+#if TORCH_VERSION_MINOR >= 13
+#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
+#include <torch/csrc/distributed/c10d/Store.hpp>
+#include <torch/csrc/distributed/c10d/Types.hpp>
+#include <torch/csrc/distributed/c10d/Utils.hpp>
+#else
 #include <c10d/ProcessGroup.hpp>
 #include <c10d/Store.hpp>
 #include <c10d/Types.hpp>
 #include <c10d/Utils.hpp>
+#endif
+
 #include <ProcessGroupCCL.hpp>
 
 namespace py = pybind11;

@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <chrono>
 #include "env.h"
 #include "dispatch_stub.h"
 
@@ -57,15 +58,19 @@ static void format_tensors_size(std::ostream& os, const std::vector<T>& vec) {
   os << "]";
 }
 
-static void format_pg_rank(std::ostream& os, const ProcessGroupCCL& pg_ccl) {
-  os << "[" <<pg_ccl.getRank() << "/" <<  pg_ccl.getSize() << "]";
+static void format_pg_rank_with_number(std::ostream& os, const ProcessGroupCCL& pg_ccl, const int64_t& curr_ccl_primitive_number) {
+  os << "[" <<pg_ccl.getRank() << "/" <<  pg_ccl.getSize() << "/" << curr_ccl_primitive_number << "]";
+}
+
+static void format_time_elapsed(std::ostream& os, const std::chrono::microseconds& duration) {
+  os << " Time elapsed (ms): " << duration.count() / 1000.0F;
 }
 
 class DebugCCLStub final: public DispatchStub {
 
 public:
 
-  DebugCCLStub(c10::DeviceType dev_type, DispatchStub* stub) : dev_type(dev_type), hdlr(stub) {}
+  DebugCCLStub(c10::DeviceType dev_type, DispatchStub* stub) : dev_type(dev_type), hdlr(stub), ccl_primitive_number(0) {}
 
   ~DebugCCLStub() {}
 
@@ -76,12 +81,19 @@ protected:
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::allreduce: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " ";
     format_tensors_size(os, tensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->allreduce_(tensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -90,12 +102,19 @@ protected:
                                                          ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::reduce: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " ";
     format_tensors_size(os, tensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->reduce_(tensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -105,14 +124,21 @@ protected:
                                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::_reduce_scatter_base: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensor);
     os << " output ";
     format_tensors_size(os, outputTensor);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->_reduce_scatter_base_(outputTensor, inputTensor, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -122,14 +148,21 @@ protected:
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::allgather: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensors);
     os << " output ";
     format_tensors_size(os, outputTensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->allgather_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -139,14 +172,21 @@ protected:
                                                          ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::gather: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensors);
     os << " output ";
     format_tensors_size(os, outputTensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->gather_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -156,14 +196,21 @@ protected:
                                                                 ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::_allgather_base: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensor);
     os << " output ";
     format_tensors_size(os, outputTensor);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->_allgather_base_(outputTensor, inputTensor, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;                                                              
   }
   
@@ -173,14 +220,21 @@ protected:
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::scatter: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensors);
     os << " output ";
     format_tensors_size(os, outputTensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->scatter_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -189,12 +243,19 @@ protected:
                                                             ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::broadcast: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " ";
     format_tensors_size(os, tensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->broadcast_(tensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -206,7 +267,7 @@ protected:
                                                                 ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::alltoall_base: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " input ";
     format_tensors_size(os, inputTensor);
     os << " output ";
@@ -215,7 +276,14 @@ protected:
     os << " outputSplitSizes [" << outputSplitSizes << "]";
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->alltoall_base_(outputTensor, inputTensor, outputSplitSizes, inputSplitSizes, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -225,14 +293,21 @@ protected:
                                                            ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::alltoall: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     os << " inputs ";
     format_tensors_size(os, inputTensors);
     os << " outputs ";
     format_tensors_size(os, outputTensors);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->alltoall_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 
@@ -240,15 +315,23 @@ protected:
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::barrier: ";
-    format_pg_rank(os, pg_ccl);
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
     std::cout << os.str() << std::endl;
 
+    auto workStartTime_ = std::chrono::steady_clock::now();
     auto work = hdlr->barrier_(opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
     return work;
   }
 private:
   c10::DeviceType dev_type;
   DispatchStub* hdlr;
+  int64_t ccl_primitive_number;
 };
 
 

@@ -11,7 +11,7 @@ BUILD_DIR = 'build'
 def get_compiler(runtime):
     if runtime == 'dpcpp':
         c_compiler = 'icx'
-        cpp_compiler = 'dpcpp'
+        cpp_compiler = 'icpx'
     else:
         c_compiler = 'cc'
         cpp_compiler = 'c++'

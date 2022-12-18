@@ -1,4 +1,4 @@
-find_package(IntelExtensionPytorch REQUIRED)
+find_package(IPEX REQUIRED)
 
 set(CCL_DPCPP_SRCS dpcpp_ccl.cpp)
 

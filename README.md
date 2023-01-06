@@ -36,6 +36,7 @@ We recommend Anaconda as Python package management system. The following is the 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
+   | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.13.100)   |
    | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
    | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
    | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)   |
@@ -64,7 +65,8 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 | COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
 | CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
-| CCL_SHA_VERSION                     | False          |add git head sha version to Wheel name                                                               |
+| CCL_SHA_VERSION                     | False          | Add git head sha version to Wheel name                                                              |
+| BUILD_NO_ONECCL_PACKAGE             | False          | Package the Wheel without oneCCL library                                                            |
 
 ## Lunch Option List
 
@@ -93,8 +95,14 @@ The following lunch options are supported in Intel® oneCCL Bindings for PyTorch
    # for CPU Backend Only
    python setup.py install
    # use DPC++ Compiler to enable support for Intel XPU
-   COMPUTE_BACKEND=dpcpp python setup.py install
+   BUILD_NO_ONECCL_PACKAGE=ON COMPUTE_BACKEND=dpcpp python setup.py install
    ```
+   
+**Note:** To run the torch-ccl without oneCCL library installed, Please make sure you have installed oneCCL in the oneAPI basekit from https://www.intel.com/content/www/us/en/developer/tools/oneapi/toolkits.html#base-kit
+
+```bash
+source $basekit_root/ccl/latest/env/vars.sh
+```
 
 ### Install PreBuilt Wheel
 
@@ -102,6 +110,7 @@ Wheel files are avaiable for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
+| 1.13.100          |            | √          | √          | √          | √           |
 | 1.13              |            | √          | √          | √          | √           |
 | 1.12.100          |            | √          | √          | √          | √           |
 | 1.12.0            |            | √          | √          | √          | √           |

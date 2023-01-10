@@ -36,8 +36,8 @@ We recommend Anaconda as Python package management system. The following is the 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
-   | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.13.100)   |
-   | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
+   | [v1.13.0](https://github.com/pytorch/pytorch/tree/v1.13.0)          |  [ccl_torch1.13.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.13.100)   |
+   | [v1.13.0](https://github.com/pytorch/pytorch/tree/v1.13.0)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
    | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
    | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)   |
    | [v1.11.0](https://github.com/pytorch/pytorch/tree/v1.11.0)      |  [ccl_torch1.11](https://github.com/intel/torch-ccl/tree/ccl_torch1.11)   |

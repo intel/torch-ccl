@@ -117,10 +117,14 @@ Wheel files are avaiable for the following Python versions.
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
 
+Installation for CPU:
 ```bash
 python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
-
+Installation for GPU:
+```bash
+python -m pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable-xpu
+```
 ## Usage
 
 example.py

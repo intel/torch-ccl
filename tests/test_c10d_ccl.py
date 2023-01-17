@@ -264,6 +264,30 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     @skip_if_not_multixpu
     def test_gather_basics_multi_xpu(self):
         self._test_gather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+   
+    def test_allgather_base_ops(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def allgather_base(output_t, input_t):
+            work = pg._allgather_base(output_t, input_t)
+            work.wait()
+
+        tensor = torch.tensor([self.rank])
+        output_t = torch.empty((self.world_size), dtype=tensor.dtype)
+        allgather_base(output_t, tensor)
+
+    def test_reduce_scatter_base_ops(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def reduce_scatter_base(output_t, input_t):
+            work = pg._reduce_scatter_base(output_t, input_t)
+            work.wait()
+
+        tensor = torch.arange(self.world_size)
+        output_t = torch.tensor(self.rank, dtype=tensor.dtype)
+        reduce_scatter_base(output_t, tensor)
 
     def _test_allgather_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)

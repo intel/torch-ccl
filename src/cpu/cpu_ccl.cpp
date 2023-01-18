@@ -158,11 +158,6 @@ protected:
                                                             const GatherOptions& opts,
                                                             ProcessGroupCCL& pg) override;
   
-  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
-                                                            at::Tensor& inputTensor,
-                                                            const ReduceScatterOptions& opts,
-                                                            ProcessGroupCCL& pg) override;
-
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
                                                                at::Tensor& inputTensor,
                                                                std::vector<int64_t>& outputSplitSizes,
@@ -348,51 +343,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vecto
           "oneccl_bindings_for_pytorch::cpu_work::reduce");
 
   work->debugName = std::string("cpu::reduce");
-  enqueue(work);
-  return work;
-}
-
-c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_reduce_scatter_base_(at::Tensor& outputTensor,
-                                                                                     at::Tensor& inputTensor,
-                                                                                     const ReduceScatterOptions& opts,
-                                                                                     ProcessGroupCCL& pg_ccl) {
-  const int world_size = pg_ccl.getSize();
-  if (inputTensor.numel() != outputTensor.numel() * world_size) {
-    TORCH_CHECK(
-            false,
-            "input tensor must be the same size as output size times world size");
-  }
-
-  // just a wrapper to fit the collective interface
-  auto inputs = std::vector<at::Tensor> {inputTensor};
-  auto outputs = std::vector<at::Tensor> {outputTensor};
-
-  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  work = collective<get_ccl_comms, CPUWorkCCL>(
-          pg_ccl,
-          inputs,
-          outputs,
-          [=](at::Tensor input,
-              at::Tensor output,
-              ccl::reduce_attr attr,
-              ccl::communicator& comm) {
-
-            ccl::event ret_evt;
-            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-              CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
-                                                      output.data_ptr(),
-                                                      (size_t) output.numel(),
-                                                      cclDatatypes.at(input.scalar_type()),
-                                                      cclOps.at(opts.reduceOp),
-                                                      comm));
-            });
-            return ret_evt;
-
-          },
-          c10d::OpType::_REDUCE_SCATTER_BASE,
-          "oneccl_bindings_for_pytorch::cpu_work::_reduce_scatter_base");
-
-  work->debugName = std::string("cpu::_reduce_scatter_base");
   enqueue(work);
   return work;
 }

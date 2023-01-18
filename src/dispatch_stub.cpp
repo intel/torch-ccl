@@ -259,14 +259,6 @@ protected:
     return work;
   }
   
-  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
-                                                                at::Tensor& inputTensor,
-                                                                const ReduceScatterOptions& opts,
-                                                                ProcessGroupCCL& pg_ccl) {
-      c10::DeviceType dev_type = inputTensor.device().type();
-      return get_ccl_stub(dev_type)->_reduce_scatter_base_(outputTensor, inputTensor, opts, pg_ccl);
-  }
-
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base_(at::Tensor& outputTensor,
                                                                 at::Tensor& inputTensor,
                                                                 std::vector<int64_t>& outputSplitSizes,
@@ -389,15 +381,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vect
   return get_ccl_stub(dev_type)->reduce_(tensors, opts, pg_ccl);
 }
 
-
-c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_reduce_scatter_base(at::Tensor& outputTensor,
-                                                                      at::Tensor& inputTensor,
-                                                                      const ReduceScatterOptions& opts,
-                                                                      ProcessGroupCCL& pg_ccl) {
-  checkSameType(outputTensor, {outputTensor, inputTensor});
-  c10::DeviceType dev_type = outputTensor.device().type();
-  return get_ccl_stub(dev_type)->_reduce_scatter_base_(outputTensor, inputTensor, opts, pg_ccl);
-}
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::broadcast(std::vector<at::Tensor>& tensors,
                                                                 const BroadcastOptions& opts,

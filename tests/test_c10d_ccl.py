@@ -482,26 +482,7 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
         def reduce_scatter_base(output_t, input_t):
             work = pg._reduce_scatter_base(output_t, input_t)
             work.wait()
-
-        # anticpate an error
-        with self.assertRaisesRegex(
-                RuntimeError,
-                "input tensor must be the same size as output size times world size",
-        ):
-            input_t = fn(torch.tensor([self.rank]))
-            output_t = fn(torch.empty((self.world_size + 1), dtype=input_t.dtype))
-            # fails the check because output_t is not correctly sized
-            reduce_scatter_base(output_t, input_t)
-
-        # anticpate an error
-        with self.assertRaisesRegex(
-                RuntimeError, "Tensors are not equal in data type"
-        ):
-            tensor = fn(torch.tensor([self.rank], dtype=torch.float))
-            output_t = fn(torch.empty((self.world_size + 1), dtype=torch.long))
-            # fails the check because the dtype is different
-            reduce_scatter_base(output_t, tensor)
-
+       
     def test_reduce_scatter_base_basics(self):
         self._test_reduce_scatter_base_basics(lambda t: t.clone())
 

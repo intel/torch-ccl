@@ -176,11 +176,6 @@ public:
       const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
   
   c10::intrusive_ptr<C10D_Work> _reduce_scatter_base(
-      at::Tensor& outputTensor,
-      at::Tensor& inputTensor,
-      const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
-
-  c10::intrusive_ptr<C10D_Work> _reduce_scatter_base(
           at::Tensor& outputBuffer,
           at::Tensor& inputBuffer,
           const ReduceScatterOptions& opts = ReduceScatterOptions()) override;

@@ -59,7 +59,28 @@ static void format_tensors_size(std::ostream& os, const std::vector<T>& vec) {
 }
 
 static void format_pg_rank_with_number(std::ostream& os, const ProcessGroupCCL& pg_ccl, const int64_t& curr_ccl_primitive_number) {
-  os << "[" <<pg_ccl.getRank() << "/" <<  pg_ccl.getSize() << "/" << curr_ccl_primitive_number << "]";
+  os << "[" <<pg_ccl.getRank() << "/" <<  pg_ccl.getSize() << "#" << curr_ccl_primitive_number << "]";
+}
+
+template <typename OpOptions>
+static void format_data_flow_direction(std::ostream& os, const ProcessGroupCCL& pg_ccl, const OpOptions& opts) {
+  // Operations not yet support data flow direction
+}
+
+static void format_data_flow_direction(std::ostream& os, const ProcessGroupCCL& pg_ccl, const ReduceOptions& opts) {
+  os << " [" << pg_ccl.getRank() << "->" << opts.rootRank << "]";
+}
+
+static void format_data_flow_direction(std::ostream& os, const ProcessGroupCCL& pg_ccl, const GatherOptions& opts) {
+  os << " [" << pg_ccl.getRank() << "->" << opts.rootRank << "]";
+}
+
+static void format_data_flow_direction(std::ostream& os, const ProcessGroupCCL& pg_ccl, const ScatterOptions& opts) {
+  os << " [" << opts.rootRank << "->" << pg_ccl.getRank() << "]";
+}
+
+static void format_data_flow_direction(std::ostream& os, const ProcessGroupCCL& pg_ccl, const BroadcastOptions& opts) {
+  os << " [" << opts.rootRank << "->" << pg_ccl.getRank() << "]";
 }
 
 static void format_time_elapsed(std::ostream& os, const std::chrono::microseconds& duration) {
@@ -103,6 +124,7 @@ protected:
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::reduce: ";
     format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    format_data_flow_direction(os, pg_ccl, opts);
     os << " ";
     format_tensors_size(os, tensors);
     std::cout << os.str() << std::endl;
@@ -173,6 +195,7 @@ protected:
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::gather: ";
     format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    format_data_flow_direction(os, pg_ccl, opts);
     os << " input ";
     format_tensors_size(os, inputTensors);
     os << " output ";
@@ -221,6 +244,7 @@ protected:
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::scatter: ";
     format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    format_data_flow_direction(os, pg_ccl, opts);
     os << " input ";
     format_tensors_size(os, inputTensors);
     os << " output ";
@@ -244,6 +268,7 @@ protected:
     std::stringstream os;
     os << "oneccl_bindings_for_pytorch::" << dev_type << "::broadcast: ";
     format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    format_data_flow_direction(os, pg_ccl, opts);
     os << " ";
     format_tensors_size(os, tensors);
     std::cout << os.str() << std::endl;

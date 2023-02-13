@@ -145,8 +145,11 @@ void ProcessGroupCCL::cclInitOnce()
     }
   });
 }
-
+#if TORCH_VERSION_MAJOR > 1
+c10::intrusive_ptr<Backend> ProcessGroupCCL::createProcessGroupCCL(
+#else
 c10::intrusive_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
+#endif
     const c10::intrusive_ptr<Store>& store,
     int rank,
     int size,
@@ -156,7 +159,11 @@ c10::intrusive_ptr<ProcessGroup> ProcessGroupCCL::createProcessGroupCCL(
 }
 
 ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int rank, int size, std::chrono::milliseconds op_time_out)
+#if TORCH_VERSION_MAJOR > 1
+    : Backend(rank, size), store_(store), timeout(op_time_out),
+#else
     : ProcessGroup(rank, size), store_(store), timeout(op_time_out),
+#endif
       ccl_member_(std::make_unique<oneccl_bindings_for_pytorch::CCLCommCollector>())
 {
 #ifdef NDEBUG

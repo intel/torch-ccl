@@ -43,8 +43,12 @@
 #include <pybind11/cast.h>
 
 #include <torch/version.h>
-#if TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1 or TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1
+#include <torch/csrc/distributed/c10d/Backend.hpp>
+#else
 #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
+#endif
 #include <torch/csrc/distributed/c10d/Store.hpp>
 #include <torch/csrc/distributed/c10d/Types.hpp>
 #include <torch/csrc/distributed/c10d/Utils.hpp>
@@ -117,23 +121,23 @@ using intrusive_ptr_no_gil_destructor_class_ =
 py::class_<T, IntrusivePtrNoGilDestructor<T>>;
 
 TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
-
-
   c10d::ProcessGroupCCL::cclInitOnce();
-
   py::object module = py::module::import("torch.distributed");
   py::object register_backend = module.attr("Backend").attr("register_backend");
-
+  #if TORCH_VERSION_MAJOR > 1 
+  auto backend = py::module::import("torch._C._distributed_c10d").attr("Backend");
+  #else 
+  auto backend = module.attr("Backend");
+  #endif
   register_backend("ccl", py::cpp_function(&c10d::ProcessGroupCCL::createProcessGroupCCL,
                                            py::arg("store"),
                                            py::arg("rank"),
                                            py::arg("size"),
                                            py::arg("timeout") = std::chrono::milliseconds(
                                                    ::c10d::ProcessGroupCCL::OP_TIMEOUT_MILLIS)));
-
-  auto processGroup = module.attr("ProcessGroup");
+  
   auto processGroupCCL = intrusive_ptr_no_gil_destructor_class_<::c10d::ProcessGroupCCL>(
-          module, "ProcessGroupCCL", processGroup);
+          module, "ProcessGroupCCL", backend);
 
   processGroupCCL.def(
     py::init([](const c10::intrusive_ptr<::c10d::Store>& store,

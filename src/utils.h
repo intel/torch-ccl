@@ -37,7 +37,7 @@
 #include <ATen/record_function.h>
 
 #include <torch/version.h>
-#if TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1  or TORCH_VERSION_MINOR >= 13
 #include <torch/csrc/distributed/c10d/Types.hpp>
 #else
 #include <c10d/Types.hpp>

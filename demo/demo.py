@@ -9,7 +9,7 @@ except:
    print("cant't import ipex")
 
 import oneccl_bindings_for_pytorch
-
+use_xpu = False
 
 class Model(nn.Module):
     def __init__(self):
@@ -55,9 +55,10 @@ if __name__ == "__main__":
         L = loss_fn(res, labels)
         # backward
         print("Runing backward: {} on device {}".format(i, device))
-        with torch.autograd.profiler_legacy.profile(enabled=True, use_xpu=True) as prof:
-            L.backward()
-        print(prof)
+        with torch.autograd.profiler_legacy.profile(enabled=True) as prof:
+              L.backward()
+        #print(prof)
         # update
         print("Runing optim: {} on device {}".format(i, device))
         optimizer.step()
+    print("Finish")

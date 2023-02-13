@@ -38,11 +38,16 @@
 #include <vector>
 
 #include <torch/version.h>
-#if TORCH_VERSION_MINOR >= 13
-#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
+#if  TORCH_VERSION_MAJOR > 1 | TORCH_VERSION_MINOR >= 13
+  #if TORCH_VERSION_MAJOR > 1
+  #include <torch/csrc/distributed/c10d/Backend.hpp>
+  #else
+  #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
+  #endif 
 #include <torch/csrc/distributed/c10d/Store.hpp>
 #include <torch/csrc/distributed/c10d/Types.hpp>
 #include <torch/csrc/distributed/c10d/Utils.hpp>
+#include <torch/csrc/distributed/c10d/Backend.hpp>
 #else
 #include <c10d/ProcessGroup.hpp>
 #include <c10d/Store.hpp>
@@ -68,7 +73,7 @@ static inline void format_tensors_param(std::vector<c10::IValue>& param, const s
 
 namespace c10d {
 
-#if TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1 or TORCH_VERSION_MINOR >= 13
 using C10D_Work = c10d::Work;
 #else
 using C10D_Work = c10d::ProcessGroup::Work;
@@ -84,9 +89,13 @@ using C10D_Work = c10d::ProcessGroup::Work;
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
 constexpr const char* CCL_BACKEND_NAME = "ccl";
-class ProcessGroupCCL : public ProcessGroup
+#if TORCH_VERSION_MAJOR > 1
+using Baseclass = Backend;
+#else
+using Baseclass = ProcessGroup;
+#endif
+class ProcessGroupCCL : public Baseclass 
 {
-
 public:
   class AsyncWorkCCL : public C10D_Work {
   public:
@@ -210,7 +219,11 @@ public:
       const BarrierOptions& opts = BarrierOptions()) override;
 
   // create a new ProcessGroupCCL and initialize CCL if not initialized
+  #if TORCH_VERSION_MAJOR > 1
+  static c10::intrusive_ptr<Backend> createProcessGroupCCL(
+  #else
   static c10::intrusive_ptr<ProcessGroup> createProcessGroupCCL(
+  #endif
       const c10::intrusive_ptr<Store>& store,
       int rank = -1,
       int size = -1,

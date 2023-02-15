@@ -31,7 +31,7 @@ if __name__ == "__main__":
         # set the default rank and world size to 0 and 1
         os.environ['RANK'] = str(os.environ.get('RANK', 0))
         os.environ['WORLD_SIZE'] = str(os.environ.get('WORLD_SIZE', 1))
-    os.environ['MASTER_ADDR'] = '127.0.0.1'  # your master address
+    os.environ['MASTER_ADDR'] = str(os.environ.get('MASTER_ADDR','127.0.0.1')  # your master address
     os.environ['MASTER_PORT'] = '29500'  # your master port
     # Initialize the process group with ccl backend
     dist.init_process_group(backend='ccl')

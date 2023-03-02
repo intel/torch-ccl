@@ -43,7 +43,7 @@
 #include <pybind11/cast.h>
 
 #include <torch/version.h>
-#if TORCH_VERSION_MAJOR > 1 or TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1 || TORCH_VERSION_MINOR >= 13
 #if TORCH_VERSION_MAJOR > 1
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #else
@@ -127,7 +127,7 @@ TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
   #if TORCH_VERSION_MAJOR > 1 
   auto backend = py::module::import("torch._C._distributed_c10d").attr("Backend");
   #else 
-  auto backend = module.attr("Backend");
+  auto backend = module.attr("ProcessGroup");
   #endif
   register_backend("ccl", py::cpp_function(&c10d::ProcessGroupCCL::createProcessGroupCCL,
                                            py::arg("store"),

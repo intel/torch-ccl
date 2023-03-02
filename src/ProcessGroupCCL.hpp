@@ -38,7 +38,7 @@
 #include <vector>
 
 #include <torch/version.h>
-#if  TORCH_VERSION_MAJOR > 1 | TORCH_VERSION_MINOR >= 13
+#if  TORCH_VERSION_MAJOR > 1 || TORCH_VERSION_MINOR >= 13
   #if TORCH_VERSION_MAJOR > 1
   #include <torch/csrc/distributed/c10d/Backend.hpp>
   #else
@@ -73,7 +73,7 @@ static inline void format_tensors_param(std::vector<c10::IValue>& param, const s
 
 namespace c10d {
 
-#if TORCH_VERSION_MAJOR > 1 or TORCH_VERSION_MINOR >= 13
+#if TORCH_VERSION_MAJOR > 1 || TORCH_VERSION_MINOR >= 13
 using C10D_Work = c10d::Work;
 #else
 using C10D_Work = c10d::ProcessGroup::Work;

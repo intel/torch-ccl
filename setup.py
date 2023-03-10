@@ -102,13 +102,16 @@ class BuildCMakeExt(BuildExtension):
 
         if _check_env_flag('DEBUG'):
             build_type = 'Debug'
+        run_path = 'OFF'
+        if _check_env_flag('RUNPATH'):
+            run_path = 'ON'
 
         build_options = {
             'CMAKE_BUILD_TYPE': build_type,
             # The value cannot be easily obtained in CMakeLists.txt.
             'CMAKE_PREFIX_PATH': torch.utils.cmake_prefix_path,
-            # Enable the RPATH of the oneCCL
-            'ENABLE_LINKER_RUNPATH': 'ON',
+            # Enable the RPATH of the oneCCL and torchCCL
+            'ENABLE_LINKER_RUNPATH': run_path,
             # skip the example and test code in oneCCL
             'BUILD_EXAMPLES': 'OFF',
             'BUILD_CONFIG': 'OFF',

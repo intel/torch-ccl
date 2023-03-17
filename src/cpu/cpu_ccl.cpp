@@ -143,6 +143,11 @@ protected:
                                                             const AllgatherOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
+                                                            at::Tensor& inputTensor,
+                                                            const AllgatherOptions& opts,
+                                                            ProcessGroupCCL& pg) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const GatherOptions& opts,
@@ -434,6 +439,59 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_(std::ve
     "oneccl_bindings_for_pytorch::cpu_work::allgather");
 
   work->debugName = std::string("cpu::allgather");
+  enqueue(work);
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_allgather_base_(at::Tensor& outputTensor,
+                                                                      at::Tensor& inputTensor,
+                                                                      const AllgatherOptions& opts,
+                                                                      ProcessGroupCCL& pg) {
+
+  checkSingleTensorHelper(inputTensor);
+  checkSingleTensorHelper(outputTensor);
+  int size = pg.getSize();
+  if (inputTensor.dtype() != outputTensor.dtype()) {
+    TORCH_CHECK(false, "output tensor must have the same type as input tensor");
+  }
+
+  if (inputTensor.numel() * size != outputTensor.numel()) {
+    TORCH_CHECK(
+        false,
+        "output tensor size must be equal to world_size times input tensor size");
+  }
+  std::vector<at::Tensor> inputs{inputTensor};
+  std::vector<at::Tensor> outputs{outputTensor};
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, CPUWorkCCL>(
+    pg,
+    inputs,
+    outputs,
+    [=](at::Tensor input,
+        at::Tensor output,
+        ccl::allgatherv_attr attr,
+        ccl::communicator& comm) {
+        ccl::event ret_evt;
+
+        void* recvBuf = output.data_ptr();
+        std::vector<size_t> recvCounts= std::vector(size, size_t(input.numel()));
+        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+            CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                                (size_t) input.numel(),
+                                                recvBuf,
+                                                recvCounts,
+                                                cclDatatypes.at(input.scalar_type()),
+                                                comm,
+                                                attr););
+        });
+
+        return ret_evt;
+      },  
+    c10d::OpType::ALLGATHER,
+    "oneccl_bindings_for_pytorch::cpu_work::_allgather_base");
+
+  work->debugName = std::string("cpu::_allgather_base");
   enqueue(work);
   return work;
 }

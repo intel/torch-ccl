@@ -282,6 +282,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allgather(std::v
   return get_ccl_stub(dev_type)->allgather_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_allgather_base(at::Tensor& outputTensor,
+                                                                at::Tensor& inputTensor,
+                                                                const AllgatherOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl) {
+  c10::DeviceType dev_type = inputTensor.device().type();
+  return get_ccl_stub(dev_type)->_allgather_base_(outputTensor, inputTensor, opts, pg_ccl);
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::gather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                              std::vector<at::Tensor>& inputTensors,
                                                              const GatherOptions& opts,

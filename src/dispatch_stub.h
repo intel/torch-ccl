@@ -79,6 +79,11 @@ public:
                                                              const ScatterOptions& opts,
                                                              ProcessGroupCCL& pg_ccl);
 
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base(at::Tensor & outputTensor,
+                                                                  at::Tensor& inputTensor,
+                                                                  const ReduceScatterOptions& opts,
+                                                                  ProcessGroupCCL& pg_ccl);
+
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base(at::Tensor& outputTensor,
                                                                       at::Tensor& inputTensor,
                                                                       std::vector<int64_t>& outputSplitSizes,
@@ -142,6 +147,15 @@ public:
                                                                   const ScatterOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl){
     fail(outputTensors[0].device().type(), "scatter");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+  
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                    at::Tensor& inputTensor,
+                                                                    const ReduceScatterOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) {
+
+    fail(inputTensor.device().type(), "_reduce_scatter_base");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
 

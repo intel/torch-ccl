@@ -215,6 +215,16 @@ protected:
                                                          std::vector<at::Tensor>& inputTensors,
                                                          const GatherOptions& opts,
                                                          ProcessGroupCCL& pg) override;
+  
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _allgather_base_(at::Tensor& outputTensor,
+                                                            at::Tensor& inputTensor,
+                                                            const AllgatherOptions& opts,
+                                                            ProcessGroupCCL& pg) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
+                                                            at::Tensor& inputTensor,
+                                                            const ReduceScatterOptions& opts,
+                                                            ProcessGroupCCL& pg) override;
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
                                                            std::vector<at::Tensor>& inputTensors,
@@ -517,6 +527,52 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
   work->debugName = std::string("xpu::gather");
   execute(work);
 
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_allgather_base_(at::Tensor& outputTensor,
+                                                                      at::Tensor& inputTensor,
+                                                                      const ReduceScatterOptions& opts,
+                                                                      ProcessGroupCCL& pg) {
+
+  checkSingleTensorHelper(inputTensor);
+  checkSingleTensorHelper(outputTensor);
+  int size = pg.getSize();
+  if (inputTensor.dtype() != outputTensor.dtype()) {
+    TORCH_CHECK(false, "output tensor must have the same type as input tensor");
+  }
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  TORCH_CHECK(
+        false,
+        "_allgather_base_ is not supported in ProcessGroupCCL for GPU now");
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_base_(at::Tensor& outputTensor,
+                                                                      at::Tensor& inputTensor,
+                                                                      const ReduceScatterOptions& opts,
+                                                                      ProcessGroupCCL& pg) {
+
+  checkSingleTensorHelper(inputTensor);
+  checkSingleTensorHelper(outputTensor);
+  int size = pg.getSize();
+  if (inputTensor.dtype() != outputTensor.dtype()) {
+    TORCH_CHECK(false, "output tensor must have the same type as input tensor");
+  }
+
+  if (outputTensor.numel() * size != inputTensor.numel()) {
+    TORCH_CHECK(
+        false,
+        "input tensor size must be equal to world_size times output tensor size");
+  }
+  std::vector<at::Tensor> inputs{inputTensor};
+  std::vector<at::Tensor> outputs{outputTensor};
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  TORCH_CHECK(
+        false,
+        "_reduce_scatter_base_ is not supported in ProcessGroupCCL for GPU now");
   return work;
 }
 

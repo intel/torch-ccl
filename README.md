@@ -92,8 +92,11 @@ The following lunch options are supported in Intel® oneCCL Bindings for PyTorch
    ```bash
    # for CPU Backend Only
    python setup.py install
-   # use DPC++ Compiler to enable support for Intel XPU
+   # for XPU Backend: use DPC++ Compiler to enable support for Intel XPU
+   # build with oneCCL from third party
    COMPUTE_BACKEND=dpcpp python setup.py install
+   # build without oneCCL
+   BUILD_NO_ONECCL_PACKAGE=ON COMPUTE_BACKEND=dpcpp python setup.py install
    ```
 
 ### Install PreBuilt Wheel

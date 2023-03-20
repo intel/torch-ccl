@@ -1,0 +1,8 @@
+allreduce,1,-1
+broadcast,3072,0
+allreduce,1,-1
+broadcast,3,0
+broadcast,5,0
+reduce,1024,0
+reduce,11264,0
+allgather,1024,-1

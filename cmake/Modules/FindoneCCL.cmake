@@ -29,7 +29,7 @@ IF (USE_SYSTEM_ONECCL)
         SET(CCL_CONFIGURATION "cpu_icc")
     ENDIF()
 
-    find_package(oneCCL CONFIG REQUIRED PATHS ${INTELONEAPIROOT}/ccl/latest)
+    find_package(oneCCL CONFIG REQUIRED PATHS ${oneapi_root_hint}/ccl/latest)
 
 ELSE()
     SET(ONECCL_ROOT "${PROJECT_SOURCE_DIR}/third_party/oneCCL")

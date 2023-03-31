@@ -23,14 +23,22 @@ parser.add_argument('--fixed',
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-os.environ['RANK'] = str(os.environ.get('PMI_RANK', 0))
-os.environ['WORLD_SIZE'] = str(os.environ.get('PMI_SIZE', 1))
+if 'PMI_RANK' in os.environ.keys() and 'PMI_SIZE' in os.environ.keys():
+    os.environ['RANK'] = str(os.environ.get('PMI_RANK', 0))
+    os.environ['WORLD_SIZE'] = str(os.environ.get('PMI_SIZE', 1)) # mpich set
+elif 'PMIX_RANK' in os.environ.keys() and 'PALS_LOCAL_SIZE' in os.environ.keys():
+    os.environ['RANK'] = os.environ.get('PMIX_RANK')
+    os.environ['WORLD_SIZE'] = str(os.environ.get('PALS_LOCAL_SIZE', -1))
 os.environ['MASTER_ADDR'] = '127.0.0.1'  # your master address
 os.environ['MASTER_PORT'] = '29500'  # your master port
+
 if 'OMPI_COMM_WORLD_LOCAL_RANK' in os.environ.keys():
     local_rank = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
-else:
+elif 'MPI_LOCALRANKID' in os.environ.keys():
     local_rank = os.environ['MPI_LOCALRANKID']
+else:
+    local_rank = os.environ['PALS_LOCAL_RANKID']
+
 local_rank = int(local_rank)
 devid = local_rank
 

@@ -68,11 +68,11 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 | CCL_SHA_VERSION                     | False          | Add git head sha version to Wheel name                                                              |
 | BUILD_NO_ONECCL_PACKAGE             | False          | Package the Wheel without oneCCL library                                                            |
 
-## Lunch Option List
+## Launch Option List
 
-The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
+The following launch options are supported in Intel® oneCCL Bindings for PyTorch*.
 
-| Lunch Option                             | Default Value | Description                                                           |
+| Launch Option                             | Default Value | Description                                                           |
 | :--------------------------------------: | :-----------: | :-------------------------------------------------------------------: |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |

@@ -432,6 +432,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
                                              stream,
                                              attr), stream.get_native());
       });
+      ret_evt.wait();
       return ret_evt;
   },
   c10d::OpType::ALLREDUCE);
@@ -470,6 +471,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
                                 comm,
                                 stream), stream.get_native());
       });
+      ret_evt.wait();
       return ret_evt;
 
   },
@@ -520,6 +522,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_b
                                                       comm,
                                                       stream), stream.get_native());
             });
+            ret_evt.wait();
             return ret_evt;
 
           },
@@ -558,6 +561,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
                                              stream,
                                              attr), stream.get_native());
       });
+      ret_evt.wait();
       return ret_evt;
     },
     c10d::OpType::BROADCAST);
@@ -610,7 +614,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
                                   comm,
                                   stream), stream.get_native());
       });
-
+      ret_evt.wait();
       return ret_evt;
     },
     c10d::OpType::ALLGATHER);
@@ -658,6 +662,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_allgather_base_(
                                          comm,
                                          stream), stream.get_native());
             });
+            ret_evt.wait();
             return ret_evt;
           },
           c10d::OpType::_ALLGATHER_BASE);
@@ -752,7 +757,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
                   }
                 }
               }
-
+              ret_evt.wait();
               return ret_evt;
           },
           c10d::OpType::GATHER);
@@ -803,7 +808,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                                                       stream,
                                                       attr), stream.get_native());
                 });
-
+                ret_evt.wait();
                 return ret_evt;
             },
             c10d::OpType::ALLTOALL_BASE);
@@ -849,6 +854,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                                                        stream,
                                                        attr), stream.get_native());
                 });
+                ret_evt.wait();
                 return ret_evt;
             },
             c10d::OpType::ALLTOALL_BASE);
@@ -931,6 +937,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
                   outputs[i].view({-1}).copy_(flatOutputSplits[i]);
                 }
               }
+              ret_evt.wait();
               return ret_evt;
           },
           c10d::OpType::ALLTOALL);

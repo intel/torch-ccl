@@ -33,19 +33,20 @@ The table below shows which functions are available for use with CPU / Intel dGP
 
 We recommend Anaconda as Python package management system. The following is the corresponding branches (tags) of `oneccl_bindings_for_pytorch` and supported Pytorch.
 
-   | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
-   | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
-   | `master`                                                        |  `master`                                                                 |
-   | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
-   | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
-   | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)   |
-   | [v1.11.0](https://github.com/pytorch/pytorch/tree/v1.11.0)      |  [ccl_torch1.11](https://github.com/intel/torch-ccl/tree/ccl_torch1.11)   |
-   | [v1.10.0](https://github.com/pytorch/pytorch/tree/v1.10.0)      |  [ccl_torch1.10](https://github.com/intel/torch-ccl/tree/ccl_torch1.10)   |
-   | [v1.9.0](https://github.com/pytorch/pytorch/tree/v1.9.0)        |  [ccl_torch1.9](https://github.com/intel/torch-ccl/tree/ccl_torch1.9)     |
-   | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1)        |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)     |
-   | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1)        |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)     |
-   | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0)        |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)     |
-   | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)                |
+   | `torch`                                                         | `oneccl_bindings_for_pytorch`                                                   |
+   | :-------------------------------------------------------------: | :-----------------------------------------------------------------------:       |
+   | `master`                                                        |  `master`                                                                       |
+   | [v1.13.1](https://github.com/pytorch/pytorch/tree/v1.13.1)      |  [ccl_torch1.13.200](https://github.com/intel/torch-ccl/tree/ccl_torch1.13.200) |
+   | [v1.13.0](https://github.com/pytorch/pytorch/tree/v1.13.0)      |  [ccl_torch1.13.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.13.100) |
+   | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100) |
+   | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)         |
+   | [v1.11.0](https://github.com/pytorch/pytorch/tree/v1.11.0)      |  [ccl_torch1.11](https://github.com/intel/torch-ccl/tree/ccl_torch1.11)         |
+   | [v1.10.0](https://github.com/pytorch/pytorch/tree/v1.10.0)      |  [ccl_torch1.10](https://github.com/intel/torch-ccl/tree/ccl_torch1.10)         |
+   | [v1.9.0](https://github.com/pytorch/pytorch/tree/v1.9.0)        |  [ccl_torch1.9](https://github.com/intel/torch-ccl/tree/ccl_torch1.9)           |
+   | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1)        |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)           |
+   | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1)        |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)           |
+   | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0)        |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)           |
+   | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)                      |
 
 The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.9 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable `alltoall` collective communication primitive. The patch file about these two PRs is in `patches` directory and you can use it directly.
 
@@ -53,7 +54,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 - Python 3.6 or later and a C++17 compiler
 
-- PyTorch v1.13.0
+- PyTorch v1.13.1
 
 ## Build Option List
 
@@ -64,7 +65,8 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 | COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
 | CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
-| CCL_SHA_VERSION                     | False          |add git head sha version to Wheel name                                                               |
+| CCL_SHA_VERSION                     | False          | add git head sha version to Wheel name                                                              |
+| USE_SYSTEM_ONECCL                   | False          | Use available oneCCL in system, like from oneAPI basekit                                            |
 
 ## Launch Option List
 
@@ -92,11 +94,18 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
    ```bash
    # for CPU Backend Only
    python setup.py install
+   ```
+   
+   ```bash
    # for XPU Backend: use DPC++ Compiler to enable support for Intel XPU
-   # build with oneCCL from third party
+   # Option 1: build with oneCCL from third party (recommended)
    COMPUTE_BACKEND=dpcpp python setup.py install
-   # build without oneCCL
-   BUILD_NO_ONECCL_PACKAGE=ON COMPUTE_BACKEND=dpcpp python setup.py install
+   ```
+   ```bash
+   # for XPU Backend: use DPC++ Compiler to enable support for Intel XPU
+   # Option 2: build without oneCCL and use oneCCL in system
+   export INTELONEAPIROOT=${HOME}/intel/oneapi
+   USE_SYSTEM_ONECCL=ON COMPUTE_BACKEND=dpcpp python setup.py install
    ```
 
 ### Install PreBuilt Wheel
@@ -105,14 +114,20 @@ Wheel files are avaiable for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
-| 1.13              |            | √          | √          | √          | √           |
+| 1.13.200          |            | √          | √          | √          | √           |
+| 1.13.100          |            | √          | √          | √          | √           |
 | 1.12.100          |            | √          | √          | √          | √           |
 | 1.12.0            |            | √          | √          | √          | √           |
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
 
+Installation for CPU:
 ```bash
 python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable-cpu
+```
+Installation for GPU:
+```bash
+python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable-xpu
 ```
 
 ## Usage

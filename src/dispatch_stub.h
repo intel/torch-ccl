@@ -96,7 +96,17 @@ public:
                                                                  std::vector<at::Tensor>& inputTensors,
                                                                  const AllToAllOptions& opts,
                                                                  ProcessGroupCCL& pg_ccl);
-  
+                                                                
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> send(std::vector<at::Tensor>& tensors,
+                                                                int dstRank,
+                                                                int tag,
+                                                                ProcessGroupCCL& pg_ccl);
+
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> recv(std::vector<at::Tensor>& tensors,
+                                                                int srcRank,
+                                                                int tag,
+                                                                ProcessGroupCCL& pg_ccl);  
+
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier(const BarrierOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl);
 
@@ -196,6 +206,22 @@ public:
                                                                     ProcessGroupCCL& pg_ccl) {
     fail(tensors[0].device().type(), "allreduce");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> send_(std::vector<at::Tensor>& tensors,
+                                                                int dstRank,
+                                                                int tag,
+                                                                ProcessGroupCCL& pg_ccl) {
+    fail(tensors[0].device().type(),"send");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();                                                            
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> recv_(std::vector<at::Tensor>& tensors,
+                                                                int srcRank,
+                                                                int tag,
+                                                                ProcessGroupCCL& pg_ccl) {
+    fail(tensors[0].device().type(),"recv");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();                                                            
   }
 private:
   static void fail(c10::DeviceType dev_type, const std::string method) {

@@ -347,19 +347,29 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::alltoall(
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::send(
-    std::vector<at::Tensor>& /* unused */,
-    int /* unused */,
-    int /* unused */)
+    std::vector<at::Tensor>& tensors,
+    int dstRank,
+    int tag)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support send");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::send", tensor_param);
+
+  auto work = DispatchStub::send(tensors, dstRank, tag, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::recv(
-    std::vector<at::Tensor>& /* unused */,
-    int /* unused */,
-    int /* unused */)
+    std::vector<at::Tensor>& tensors,
+    int srcRank,
+    int tag)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support recv");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::recv", tensor_param);
+
+  auto work = DispatchStub::recv(tensors, srcRank, tag, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::recvAnysource(

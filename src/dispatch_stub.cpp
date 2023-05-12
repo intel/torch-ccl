@@ -336,6 +336,50 @@ protected:
     return work;
   }
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> send_(std::vector<at::Tensor>& tensors,
+                                                            int dstRank,
+                                                            int tag,
+                                                            ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::send " << "(tag = " << tag << "): ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " ";
+    format_tensors_size(os, tensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->send_(tensors, dstRank, tag, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> recv_(std::vector<at::Tensor>& tensors,
+                                                            int dstRank,
+                                                            int tag,
+                                                            ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::recv " << "(tag = " << tag << "): ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " ";
+    format_tensors_size(os, tensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->recv_(tensors, dstRank, tag, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                           ProcessGroupCCL& pg_ccl) override {
     std::stringstream os;
@@ -482,6 +526,24 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall(std::ve
   checkSameType(inputTensors[0], outputTensors);
   c10::DeviceType dev_type = inputTensors[0].device().type();
   return get_ccl_stub(dev_type)->alltoall_(outputTensors, inputTensors, opts, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::send(std::vector<at::Tensor>& tensors,
+                                                                       int dstRank,
+                                                                       int tag,
+                                                                       ProcessGroupCCL& pg_ccl) {
+  checkSameType(tensors[0], tensors);
+  c10::DeviceType dev_type = tensors[0].device().type();
+  return get_ccl_stub(dev_type)->send_(tensors, dstRank, tag, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::recv(std::vector<at::Tensor>& tensors,
+                                                                       int srcRank,
+                                                                       int tag,
+                                                                       ProcessGroupCCL& pg_ccl) {
+  checkSameType(tensors[0], tensors);
+  c10::DeviceType dev_type = tensors[0].device().type();
+  return get_ccl_stub(dev_type)->recv_(tensors, srcRank, tag, pg_ccl);
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::barrier(const BarrierOptions& opts,

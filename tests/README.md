@@ -9,6 +9,20 @@ To start the test_c10d_ccl.py test, run:
 python test_c10d_ccl.py
 ```
 
+## functionality validation of point-to-point communication primitives
+For within-card and cross-cards p2p test, run:
+
+```bash
+python test_c10d_p2p.py
+```
+
+For cross-nodes p2p test, run:
+
+```bash
+# Mpich
+mpiexec -host nodeA,nodeB -np 24 -ppn 12 python -u test_p2p_crossnodes.py --dist_url $NODE_IP --world_size 24
+```
+
 ## broadcast/allreduce profiling
 To start the test_allreduce.py test, run:
 

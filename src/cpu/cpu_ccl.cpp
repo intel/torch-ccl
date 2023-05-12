@@ -63,7 +63,7 @@ void checkSameSizeAndType(const at::Tensor& tensor,
   }
 }
 
-Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg, const std::string& devices_key, const std::vector<at::Device>& devices) {
+Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg, const std::string& devices_key, const std::vector<at::Device>& devices, c10d::OpType op_type = OpType::UNKNOWN, int p2pRank = 0, bool isSendRecvSelf = false) {
   // Sanity check
   if (devices_key.empty()) {
     throw std::runtime_error(

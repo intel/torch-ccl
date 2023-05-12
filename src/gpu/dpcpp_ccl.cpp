@@ -138,7 +138,7 @@ c10::DeviceType check_tensors_properties(const std::vector<at::Tensor>& tensors)
   return dev_type;
 }
 
-Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices) {
+Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_key, const std::vector<at::Device>& devices, c10d::OpType op_type = OpType::UNKNOWN, int p2pRank = 0, bool isSendRecvSelf = false) {
 
   RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::get_ccl_comms", std::vector<c10::IValue>());
   // Sanity check
@@ -157,9 +157,8 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     return *cached_comms;
   }
 
-  // Only support the symmetric distributed communication
-  int total_rank_size = pg_ccl.getSize() * devices.size();
-  int local_base_rank = pg_ccl.getRank() * devices.size();
+  bool batchP2P = true; // treat like collective
+  bool singleP2POp = c10d::isP2POp(op_type, batchP2P);
 
   ccl::vector_class<ccl::pair_class<int, ccl::device>> devs_rank;
   ccl::vector_class<ccl::stream> ccl_streams;
@@ -168,7 +167,23 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   torch_streams.reserve(devices.size());
 
   // Create the stream and rank dev mapping
+
+  // GPU world size and GPU local rank
+  // Only support the symmetric distributed communication
+  int total_rank_size, local_base_rank;
   for (size_t i = 0; i < devices.size(); i++) {
+
+    if (!singleP2POp) {
+      total_rank_size = pg_ccl.getSize() * devices.size();
+      local_base_rank = pg_ccl.getRank() * devices.size();
+    } else if (isSendRecvSelf) {
+      total_rank_size = 1;
+      local_base_rank = 0;
+    } else {
+      total_rank_size = 2;
+      local_base_rank = p2pRank;
+    }
+
     c10::impl::VirtualGuardImpl impl(devices[i].type());
     // XPU doesn't support prioritized stream.
     c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
@@ -215,6 +230,7 @@ public:
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
 
   void run() override {
+
     const auto devices = get_device_list(this->inputs);
     // add SYCL running dependency computation -> communication.
     sync_streams(devices, this->comms.torch_streams);
@@ -236,6 +252,65 @@ public:
 
   // No explicitly synchronization.
   virtual ~XPUWorkCCL() {}
+
+  // Waiting on the work's on XPU backend
+  bool wait(std::chrono::milliseconds timeout) override {
+    this->synchronizeInternal(timeout);
+    // Check for errors and throw appropriate exception.
+    this->checkAndThrowException();
+    return true;
+  }
+
+  void finishAsyncWorkCCL() override {
+    c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    // under the stream guard. Mark the Future completing.
+    this->AsyncWorkCCL::finishAsyncWorkCCL();
+  }
+private:
+
+};
+
+template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
+class XPUP2PAsyncWork : public P2PAsyncWork<RunF, CommType, InputType, OutputType, attr_t> {
+
+public:
+  XPUP2PAsyncWork(const std::vector<InputType>& inputs,
+             const std::vector<OutputType>& outputs,
+             int peer,
+             const RunF f,
+             CommType& comms,
+             attr_t& attr,
+             std::chrono::milliseconds timeout,
+             int rank,
+             c10d::OpType opType,
+             const char* profilingTitle,
+             const c10::optional<std::vector<at::Tensor>>& inputTensors) :
+             P2PAsyncWork<RunF, CommType, InputType, OutputType, attr_t>(
+                     inputs, outputs, peer, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
+
+  void run() override {
+
+    const auto devices = get_device_list(this->inputs);
+    // add SYCL running dependency computation -> communication.
+    sync_streams(devices, this->comms.torch_streams);
+
+    for (const auto i : c10::irange(this->inputs.size())) {
+      // Both `inputs' and `outputs' are created on a worker stream and used in
+      // different ncclStreams.  Hence, both must record the ncclStream to
+      // prevent being freed before the collective finishes.
+      //
+      // We only record `inputs' here, and leave recording `outputs' to `fn' for
+      // operations where `inputs' and `outputs' are not the same.
+      //
+      // See [Sync Streams].
+      record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+    }
+
+    P2PAsyncWork<RunF, CommType, InputType, OutputType, attr_t>::run();
+  };
+
+  // No explicitly synchronization.
+  virtual ~XPUP2PAsyncWork() {}
 
   // Waiting on the work's on XPU backend
   bool wait(std::chrono::milliseconds timeout) override {
@@ -313,6 +388,18 @@ protected:
                                                                 std::vector<int64_t>& inputSplitSizes,
                                                                 const AllToAllOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> send_(
+      std::vector<at::Tensor>& tensors,
+      int dstRank,
+      int tag,
+      ProcessGroupCCL& pg) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> recv_(
+      std::vector<at::Tensor>& tensors,
+      int srcRank,
+      int tag,
+      ProcessGroupCCL& pg) override;
 
   void destroy();
   void reset() override {}
@@ -936,6 +1023,92 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
           c10d::OpType::ALLTOALL);
 
   work->debugName = std::string("xpu::alltoall");
+  execute(work);
+
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::send_(std::vector<at::Tensor>& tensors,
+                                                                       int dstRank,
+                                                                       int /* unused */,
+                                                                       ProcessGroupCCL& pg_ccl) {
+
+  if (pg_ccl.ccl_member_->ccl_comms.size() == 0) {
+    throw std::runtime_error("Point-to-point communication as the first call is not supported now, please make sure all communicators have been initilized. e.g. you could add collective call in front of dist.send/recv call to avoid this error.");
+  }
+
+  checkGPUTensor(tensors);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = pointToPoint<get_ccl_comms, XPUP2PAsyncWork>(
+    pg_ccl,
+    tensors,
+    tensors,
+    [=](at::Tensor input,
+        int dst,
+        ccl::pt2pt_attr attr,
+        ccl::communicator& comm,
+        ccl::stream& stream) {
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::send", std::vector<c10::IValue>({input}));
+
+      ccl::event ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_KERNEL_SUBMIT(ret_evt = ccl::send(input.data_ptr(),
+                                             (size_t) input.numel(),
+                                             cclDatatypes.at(input.scalar_type()),
+                                             dst,
+                                             comm,
+                                             stream,
+                                             attr), stream.get_native());
+      });
+      return ret_evt;
+  },
+  dstRank,
+  c10d::OpType::SEND);
+
+  work->debugName = std::string("xpu::send");
+  execute(work);
+
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::recv_(std::vector<at::Tensor>& tensors,
+                                                                       int srcRank,
+                                                                       int /* unused */,
+                                                                       ProcessGroupCCL& pg_ccl) {
+
+  if (pg_ccl.ccl_member_->ccl_comms.size() == 0) {
+    throw std::runtime_error("Point-to-point communication as the first call is not supported now, please make sure all communicators have been initilized. e.g. you could add collective call in front of dist.send/recv call to avoid this error.");
+  }
+
+  checkGPUTensor(tensors);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = pointToPoint<get_ccl_comms, XPUP2PAsyncWork>(
+    pg_ccl,
+    tensors,
+    tensors,
+    [=](at::Tensor output,
+        int src,
+        ccl::pt2pt_attr attr,
+        ccl::communicator& comm,
+        ccl::stream& stream) {
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::recv", std::vector<c10::IValue>({output}));
+
+      ccl::event ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+          CCL_KERNEL_SUBMIT(ret_evt = ccl::recv(output.data_ptr(),
+                                             (size_t) output.numel(),
+                                             cclDatatypes.at(output.scalar_type()),
+                                             src,
+                                             comm,
+                                             stream,
+                                             attr), stream.get_native());
+      });
+      return ret_evt;
+  },
+  srcRank,
+  c10d::OpType::RECV);
+
+  work->debugName = std::string("xpu::recv");
   execute(work);
 
   return work;

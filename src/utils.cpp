@@ -84,6 +84,14 @@ std::vector<at::Device> get_device_list(const std::vector<std::vector<at::Tensor
   return res;
 }
 
+std::string get_key_send_recv(int myRank, int peer) {
+  int lowRank = myRank < peer ? myRank : peer;
+  int highRank = myRank < peer ? peer : myRank;
+  std::string sendRecvPair =
+      std::to_string(lowRank) + ":" + std::to_string(highRank);
+  return sendRecvPair;
+}
+
 FlatCheckResult computeLengthsAndCheckFlat(
         const std::vector<at::Tensor>& tensors,
         std::vector<size_t>& lengths)

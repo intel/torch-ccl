@@ -62,7 +62,7 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 
 | Build Option                        | Default Value  | Description                                                                                         |
 | :---------------------------------: | :------------: | :-------------------------------------------------------------------------------------------------: |
-| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
+| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEND`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
 | CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
 | CCL_SHA_VERSION                     | False          | Add git head sha version to Wheel name                                                              |

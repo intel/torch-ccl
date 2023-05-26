@@ -36,8 +36,8 @@ if 'OMPI_COMM_WORLD_LOCAL_RANK' in os.environ.keys():
     local_rank = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
 elif 'MPI_LOCALRANKID' in os.environ.keys():
     local_rank = os.environ['MPI_LOCALRANKID']
-elif 'MPI_LOCALNRANKS' in os.environ.keys():
-    os.environ['LOCAL_WORLD_SIZE'] = str(os.environ.get('MPI_LOCALNRANKS',-1))
+    if 'MPI_LOCALNRANKS' in os.environ.keys():
+        os.environ['LOCAL_WORLD_SIZE'] = str(os.environ.get('MPI_LOCALNRANKS',-1))
 else:
     local_rank = os.environ['PALS_LOCAL_RANKID']
 

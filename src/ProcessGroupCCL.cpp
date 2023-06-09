@@ -42,6 +42,316 @@
 namespace c10d
 {
 
+namespace ops {
+
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> broadcast_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t root_rank,
+    int64_t root_tensor,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->broadcast(
+              tensor_vec,
+              BroadcastOptions{
+                  root_rank, root_tensor, std::chrono::milliseconds(timeout)});
+
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(tensor_vec), work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("broadcast_", broadcast_xpu_);
+}
+
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> allreduce_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+            ->allreduce(
+              tensor_vec,
+              c10d::AllreduceOptions{
+                  *reduce_op.get(), std::chrono::milliseconds(timeout)});
+
+  // Return input tensors as output tensors to make inplace allreduce look like
+  // a functional API, so that make_fx can correctly build the dependencies in
+  // the graph later.
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(tensor_vec), work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("allreduce_", allreduce_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> allreduce_coalesced_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  AllreduceCoalescedOptions opts = AllreduceCoalescedOptions{};
+  opts.reduceOp = *reduce_op.get();
+  opts.timeout = std::chrono::milliseconds(timeout);
+
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->allreduce_coalesced(tensor_vec, opts);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("allreduce_coalesced_", allreduce_coalesced_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> reduce_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t root_rank,
+    int64_t root_tensor,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->reduce(
+          tensor_vec,
+          ReduceOptions{
+              *reduce_op.get(),
+              root_rank,
+              root_tensor,
+              std::chrono::milliseconds(timeout)});
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("reduce_", reduce_xpu_);
+}
+
+std::tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<C10D_Work>>
+allgather_xpu_(
+    const std::vector<std::vector<at::Tensor>>& output_tensors,
+    at::TensorList input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t timeout) {
+  auto input_tensors_vec = input_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->allgather(
+              const_cast<std::vector<std::vector<at::Tensor>>&>(output_tensors),
+              input_tensors_vec,
+              AllgatherOptions{std::chrono::milliseconds(timeout)});
+
+  // Copy output tensors (not storage) so that this can be used in a functional
+  // manner
+  return std::
+      tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<C10D_Work>>(
+          output_tensors, work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("allgather_", allgather_xpu_);
+}
+
+std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _allgather_base_xpu_(
+    at::Tensor& output_tensor,
+    at::Tensor& input_tensor,
+    const c10::intrusive_ptr<ProcessGroup>& process_group) {
+  auto work = process_group->getBackend(c10::DeviceType::XPU)
+                  ->_allgather_base(output_tensor, input_tensor);
+
+  return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("_allgather_base_", _allgather_base_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> allgather_coalesced_xpu_(
+    const std::vector<std::vector<at::Tensor>>& output_lists,
+    const at::TensorList& input_list,
+    const c10::intrusive_ptr<ProcessGroup>& process_group) {
+  auto input_list_vec = input_list.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->allgather_coalesced(
+          const_cast<std::vector<std::vector<at::Tensor>>&>(output_lists),
+          input_list_vec);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("allgather_coalesced_", allgather_coalesced_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> gather_xpu_(
+    const std::vector<std::vector<at::Tensor>>& output_tensors,
+    const at::TensorList& input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t root_rank,
+    int64_t timeout) {
+  auto input_tensors_vec = input_tensors.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->gather(
+          const_cast<std::vector<std::vector<at::Tensor>>&>(output_tensors),
+          input_tensors_vec,
+          GatherOptions{root_rank, std::chrono::milliseconds(timeout)});
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("gather_", gather_xpu_);
+}
+
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> scatter_xpu_(
+    const at::TensorList& output_tensors,
+    const std::vector<std::vector<at::Tensor>>& input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t root_rank,
+    int64_t timeout) {
+  auto output_tensors_vec = output_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->scatter(
+              output_tensors_vec,
+              const_cast<std::vector<std::vector<at::Tensor>>&>(input_tensors),
+              ScatterOptions{root_rank, std::chrono::milliseconds(timeout)});
+
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(output_tensors_vec), work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("scatter_", scatter_xpu_);
+}
+
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>
+reduce_scatter_xpu_(
+    const at::TensorList& output_tensors,
+    const std::vector<std::vector<at::Tensor>>& input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t timeout) {
+  auto output_tensors_vec = output_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->reduce_scatter(
+              output_tensors_vec,
+              const_cast<std::vector<std::vector<at::Tensor>>&>(input_tensors),
+              ReduceScatterOptions{
+                  *reduce_op.get(), std::chrono::milliseconds(timeout)});
+
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      output_tensors_vec, work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("reduce_scatter_", reduce_scatter_xpu_);
+}
+
+std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
+    at::Tensor& output_tensor,
+    at::Tensor& input_tensor,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t timeout) {
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->_reduce_scatter_base(
+              output_tensor,
+              input_tensor,
+              ReduceScatterOptions{
+                  *reduce_op.get(), std::chrono::milliseconds(timeout)});
+
+  return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("_reduce_scatter_base_", _reduce_scatter_base_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> alltoall_base_xpu_(
+    at::Tensor& output,
+    at::Tensor& input,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    std::vector<int64_t> output_split_sizes,
+    std::vector<int64_t> input_split_sizes,
+    int64_t timeout) {
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->alltoall_base(
+          output,
+          input,
+          output_split_sizes,
+          input_split_sizes,
+          AllToAllOptions{std::chrono::milliseconds(timeout)});
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("alltoall_base_", alltoall_base_xpu_);
+}
+
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> alltoall_xpu_(
+    const at::TensorList& output_tensors,
+    const at::TensorList& input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t timeout) {
+  auto output_tensors_vec = output_tensors.vec();
+  auto input_tensors_vec = input_tensors.vec();
+  auto work = process_group->getBackend(c10::DeviceType::XPU)
+                  ->alltoall(
+                      output_tensors_vec,
+                      input_tensors_vec,
+                      AllToAllOptions{std::chrono::milliseconds(timeout)});
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(output_tensors_vec), work);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("alltoall_", alltoall_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> send_xpu(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t dstRank,
+    int64_t tag) {
+  auto tensor_vec = tensors.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->send(tensor_vec, static_cast<int>(dstRank), static_cast<int>(tag));
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("send", send_xpu);
+}
+
+c10::intrusive_ptr<C10D_Work> recv_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t srcRank,
+    int64_t tag) {
+  auto tensor_vec = tensors.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->recv(tensor_vec, static_cast<int>(srcRank), static_cast<int>(tag));
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("recv_", recv_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> recv_any_source_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t tag) {
+  auto tensor_vec = tensors.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->recvAnysource(tensor_vec, static_cast<int>(tag));
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("recv_any_source_", recv_any_source_xpu_);
+}
+} // namespace ops
+
+
 using oneccl_bindings_for_pytorch::DispatchStub;
 using oneccl_bindings_for_pytorch::call_with_lock;
 using oneccl_bindings_for_pytorch::format_tensors_param;

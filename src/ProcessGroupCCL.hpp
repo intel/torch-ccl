@@ -41,6 +41,7 @@
 #if  TORCH_VERSION_MAJOR > 1 || TORCH_VERSION_MINOR >= 13
   #if TORCH_VERSION_MAJOR > 1
   #include <torch/csrc/distributed/c10d/Backend.hpp>
+  #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
   #else
   #include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
   #endif 

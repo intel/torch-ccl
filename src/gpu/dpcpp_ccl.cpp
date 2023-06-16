@@ -1018,6 +1018,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
                   outputs[i].view({-1}).copy_(flatOutputSplits[i]);
                 }
               }
+
+	      torch_stream.synchronize();
               return ret_evt;
           },
           c10d::OpType::ALLTOALL);

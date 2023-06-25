@@ -23,6 +23,19 @@ For cross-nodes p2p test, run:
 mpiexec -host nodeA,nodeB -np 24 -ppn 12 python -u test_p2p_crossnodes.py --dist_url $NODE_IP --world_size 24
 ```
 
+## functionality validation of barrier
+For cpu barrier, run:
+
+```bash
+mpirun -np 2 python test_barrier.py
+```
+
+For xpu barrier (built with "COMPUTE_BACKEND=dpcpp"), run:
+
+```bash
+mpirun -np 2 python test_barrier.py --device xpu
+```
+
 ## broadcast/allreduce profiling
 To start the test_allreduce.py test, run:
 

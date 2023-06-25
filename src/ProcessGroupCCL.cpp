@@ -349,6 +349,19 @@ c10::intrusive_ptr<C10D_Work> recv_any_source_xpu_(
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("recv_any_source_", recv_any_source_xpu_);
 }
+
+c10::intrusive_ptr<Work> barrier_xpu(
+    at::Tensor /* unused */,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const std::vector<int64_t>& device_ids,
+    int64_t timeout) {
+  return process_group->getBackend(c10::DeviceType::XPU)
+      ->barrier(BarrierOptions{device_ids, std::chrono::milliseconds(timeout)});
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("barrier", barrier_xpu);
+}
 } // namespace ops
 
 

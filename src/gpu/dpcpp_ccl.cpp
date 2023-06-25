@@ -401,6 +401,9 @@ protected:
       int tag,
       ProcessGroupCCL& pg) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
+                                                                ProcessGroupCCL& pg) override;
+
   void destroy();
   void reset() override {}
   void runLoop();
@@ -1113,6 +1116,35 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::recv_(std::vector
   work->debugName = std::string("xpu::recv");
   execute(work);
 
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::barrier_(const BarrierOptions& opts,
+                                                                   ProcessGroupCCL& pg) {
+
+  c10::intrusive_ptr<AsyncBarrierWork> work = c10::make_intrusive<AsyncBarrierWork>();
+
+  if (pg.ccl_member_->ccl_comms.size() == 0) {
+    std::vector<at::Device> xpu_devices{at::Device(at::kXPU)};
+    const auto key = get_key_from_devs(xpu_devices);
+    get_ccl_comms(pg, key, xpu_devices);
+  }
+
+  auto& comms_map = pg.ccl_member_->ccl_comms;
+  for(auto iter = comms_map.begin(); iter != comms_map.end(); iter++){
+      for(size_t i =0 ; i < iter->second->comms.size(); i++){
+         work->getEvents().emplace_back(
+                 call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                   if (i < iter->second->streams.size()) {
+                     CCL_CHECK(return ccl::barrier(iter->second->comms[i],
+                                                   iter->second->streams[i]););
+                   } else {
+                     CCL_CHECK(return ccl::barrier(iter->second->comms[i]););
+                   }
+                 })
+                 );
+     }
+  }
   return work;
 }
 

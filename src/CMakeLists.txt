@@ -10,6 +10,7 @@ target_compile_options(oneccl_bindings_for_pytorch PUBLIC -Wall
 
 if(COMPUTE_BACKEND STREQUAL "dpcpp")
     add_subdirectory(./gpu)
+    add_definitions (-DUSE_GPU)
 endif()
 
 target_include_directories(oneccl_bindings_for_pytorch PUBLIC ./)

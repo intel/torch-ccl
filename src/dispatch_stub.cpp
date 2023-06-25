@@ -548,7 +548,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::recv(std::vector
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::barrier(const BarrierOptions& opts,
                                                               ProcessGroupCCL& pg_ccl) {
+#ifdef USE_GPU
+  std::cout << "Barrier: using xpu" << std::endl;
+  c10::DeviceType dev_type = c10::DeviceType::XPU;
+#else
+  std::cout << "Barrier: using cpu" << std::endl;
   c10::DeviceType dev_type = c10::DeviceType::CPU;
+#endif
   return get_ccl_stub(dev_type)->barrier_(opts, pg_ccl);
 }
 

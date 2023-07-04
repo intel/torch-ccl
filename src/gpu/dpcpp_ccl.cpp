@@ -34,7 +34,46 @@
 #include <dispatch_stub.h>
 #include <ipex.h>
 
+#include <sycl/sycl.hpp>
+#include "allreduce.h"
 
+int single_queue = -1;
+int disable_allreduce = -1;
+int gpu_allreduce = -1;
+
+//allreducer<sycl::ext::oneapi::bfloat16, 8, 4096> gpu_allreducer_bf16;
+allreducer<sycl::half, 8, 4096> gpu_allreducer_fp16;
+allreducer<float, 8, 4096> gpu_allreducer_fp32;
+
+int get_single_queue(int init_value = 0) {
+  int tmp_single_queue = init_value;
+  char *tmp_str = getenv("TORCH_CCL_SINGLE_QUEUE");
+  if (tmp_str) {
+    tmp_single_queue = atoi(tmp_str);
+  }
+  single_queue = tmp_single_queue;
+  return tmp_single_queue;
+}
+
+int get_disable_allreduce(int init_value = 0) {
+  int tmp_disable_allreduce = init_value;
+  char *tmp_str = getenv("TORCH_CCL_DISABLE_ALLREDUCE");
+  if (tmp_str) {
+    tmp_disable_allreduce = atoi(tmp_str);
+  }
+  disable_allreduce = tmp_disable_allreduce;
+  return tmp_disable_allreduce;
+}
+
+int get_gpu_allreduce(int init_value = 0) {
+  int tmp_gpu_allreduce = init_value;
+  char *tmp_str = getenv("TORCH_CCL_GPU_ALLREDUCE");
+  if (tmp_str) {
+    tmp_gpu_allreduce = atoi(tmp_str);
+  }
+  gpu_allreduce = tmp_gpu_allreduce;
+  return tmp_gpu_allreduce;
+}
 
 #define CCL_KERNEL_SUBMIT(cmd, q) \
 ({bool profile_barrier = (xpu::is_profiler_enabled());                        \
@@ -166,6 +205,16 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   std::vector<c10::Stream> torch_streams;
   torch_streams.reserve(devices.size());
 
+  if (single_queue == -1) {
+    get_single_queue(1);
+  }
+  if (gpu_allreduce == -1) {
+    get_gpu_allreduce(1);
+  }
+  if (disable_allreduce == -1) {
+    get_disable_allreduce(0);
+  }
+
   // Create the stream and rank dev mapping
 
   // GPU world size and GPU local rank
@@ -185,15 +234,27 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     }
 
     c10::impl::VirtualGuardImpl impl(devices[i].type());
-    // XPU doesn't support prioritized stream.
-    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
-    torch_streams.push_back(stream);
+    if (single_queue == 0) {
+      // XPU doesn't support prioritized stream.
+      c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+      torch_streams.push_back(stream);
 
-    auto q = xpu::get_queue_from_stream(stream);
-    ccl_streams.push_back(ccl::create_stream(q));
+      auto q = xpu::get_queue_from_stream(stream);
+      ccl_streams.push_back(ccl::create_stream(q));
 
-    int rank = local_base_rank + i;
-    devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+      int rank = local_base_rank + i;
+      devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+    } else {
+      c10::Stream stream = impl.getStream(devices[i]);
+      torch_streams.push_back(stream);
+
+      auto q = xpu::get_queue_from_stream(stream);
+      ccl_streams.push_back(ccl::create_stream(q));
+
+      int rank = local_base_rank + i;
+      devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+
+    }
   }
 
   // The IPEX use default global context.
@@ -205,6 +266,18 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
 
   // Create ccl::communicators
   auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
+
+  if (gpu_allreduce != 0) {
+    total_rank_size = pg_ccl.getSize();
+    local_base_rank = pg_ccl.getRank();
+
+    c10::Stream stream = impl.getStream(devices[0]);
+    auto q = xpu::get_queue_from_stream(stream);
+
+    //gpu_allreducer_bf16.init(q, local_base_rank, total_rank_size);
+    gpu_allreducer_fp16.init(q, local_base_rank, total_rank_size);
+    gpu_allreducer_fp32.init(q, local_base_rank, total_rank_size);      
+  }
 
   // Store the comms to cache
   std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
@@ -230,21 +303,23 @@ public:
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
 
   void run() override {
+    if (single_queue == 0) {
+      const auto devices = get_device_list(this->inputs);
 
-    const auto devices = get_device_list(this->inputs);
-    // add SYCL running dependency computation -> communication.
-    sync_streams(devices, this->comms.torch_streams);
+      // add SYCL running dependency computation -> communication.
+      sync_streams(devices, this->comms.torch_streams);
 
-    for (const auto i : c10::irange(this->inputs.size())) {
-      // Both `inputs' and `outputs' are created on a worker stream and used in
-      // different ncclStreams.  Hence, both must record the ncclStream to
-      // prevent being freed before the collective finishes.
-      //
-      // We only record `inputs' here, and leave recording `outputs' to `fn' for
-      // operations where `inputs' and `outputs' are not the same.
-      //
-      // See [Sync Streams].
-      record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+      for (const auto i : c10::irange(this->inputs.size())) {
+        // Both `inputs' and `outputs' are created on a worker stream and used in
+        // different ncclStreams.  Hence, both must record the ncclStream to
+        // prevent being freed before the collective finishes.
+        //
+        // We only record `inputs' here, and leave recording `outputs' to `fn' for
+        // operations where `inputs' and `outputs' are not the same.
+        //
+        // See [Sync Streams].
+        record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+      }
     }
 
     CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>::run();
@@ -262,7 +337,9 @@ public:
   }
 
   void finishAsyncWorkCCL() override {
-    c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    if (single_queue == 0) {
+      c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    }
     // under the stream guard. Mark the Future completing.
     this->AsyncWorkCCL::finishAsyncWorkCCL();
   }
@@ -290,21 +367,23 @@ public:
 
   void run() override {
 
-    const auto devices = get_device_list(this->inputs);
-    // add SYCL running dependency computation -> communication.
-    sync_streams(devices, this->comms.torch_streams);
-
-    for (const auto i : c10::irange(this->inputs.size())) {
-      // Both `inputs' and `outputs' are created on a worker stream and used in
-      // different ncclStreams.  Hence, both must record the ncclStream to
-      // prevent being freed before the collective finishes.
-      //
-      // We only record `inputs' here, and leave recording `outputs' to `fn' for
-      // operations where `inputs' and `outputs' are not the same.
-      //
-      // See [Sync Streams].
-      record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+    if (single_queue == 0) {
+      const auto devices = get_device_list(this->inputs);
+      // add SYCL running dependency computation -> communication.
+      sync_streams(devices, this->comms.torch_streams);
+      for (const auto i : c10::irange(this->inputs.size())) {
+        // Both `inputs' and `outputs' are created on a worker stream and used in
+        // different ncclStreams.  Hence, both must record the ncclStream to
+        // prevent being freed before the collective finishes.
+        //
+        // We only record `inputs' here, and leave recording `outputs' to `fn' for
+        // operations where `inputs' and `outputs' are not the same.
+        //
+        // See [Sync Streams].
+        record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+      }
     }
+
 
     P2PAsyncWork<RunF, CommType, InputType, OutputType, attr_t>::run();
   };
@@ -321,7 +400,9 @@ public:
   }
 
   void finishAsyncWorkCCL() override {
-    c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    if (single_queue == 0) {
+      c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
+    }
     // under the stream guard. Mark the Future completing.
     this->AsyncWorkCCL::finishAsyncWorkCCL();
   }
@@ -512,16 +593,47 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
       RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
-                                             output.data_ptr(),
-                                             (size_t) input.numel(),
-                                             cclDatatypes.at(input.scalar_type()),
-                                             cclOps.at(opts.reduceOp),
-                                             comm,
-                                             stream,
-                                             attr), stream.get_native());
+      if (disable_allreduce != 0) {
+        return ret_evt;
+      }
+      if (gpu_allreduce != 0 && single_queue != 0) {
+        //if (input.scalar_type() == at::kBFloat16) {
+        //  gpu_allreducer_bf16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+        //  return ret_evt;
+        //}
+        if (input.scalar_type() == at::kFloat) {
+          gpu_allreducer_fp32.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+          return ret_evt;
+        }
+        if (input.scalar_type() == at::kHalf) {
+          gpu_allreducer_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+          return ret_evt;
+        }
+      }
+      ccl::event tmp_ret_evt;
+      if (single_queue == 0) {
+        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+            CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
+                                              output.data_ptr(),
+                                              (size_t) input.numel(),
+                                              cclDatatypes.at(input.scalar_type()),
+                                              cclOps.at(opts.reduceOp),
+                                              comm,
+                                              stream,
+                                              attr), stream.get_native());
+        });
+      } else {
+        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+            CCL_KERNEL_SUBMIT(tmp_ret_evt = ccl::allreduce(input.data_ptr(),
+                                              output.data_ptr(),
+                                              (size_t) input.numel(),
+                                              cclDatatypes.at(input.scalar_type()),
+                                              cclOps.at(opts.reduceOp),
+                                              comm,
+                                              stream,
+                                              attr), stream.get_native());
       });
+      }
       return ret_evt;
   },
   c10d::OpType::ALLREDUCE);

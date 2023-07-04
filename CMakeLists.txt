@@ -40,7 +40,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 # Find OneCCL Lib
 set(DEPENDS_LIB)
 find_package(oneCCL REQUIRED)
-list(APPEND DEPENDS_LIB oneCCL torch)
+list(APPEND DEPENDS_LIB oneCCL torch mpi ze_loader)
 
 SET(LIB_NAME "oneccl_bindings_for_pytorch")
 

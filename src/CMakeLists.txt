@@ -6,7 +6,10 @@ set_target_properties(oneccl_bindings_for_pytorch PROPERTIES POSITION_INDEPENDEN
 
 target_compile_options(oneccl_bindings_for_pytorch PUBLIC -Wall
         -Wno-sign-compare
-        -Wno-unused-function)
+        -Wno-unused-function
+        -fsycl)
+
+target_link_options(oneccl_bindings_for_pytorch PUBLIC -fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen "-device pvc -internal_options -ze-intel-has-buffer-offset-arg -internal_options -cl-intel-greater-than-4GB-buffer-required")
 
 if(COMPUTE_BACKEND STREQUAL "dpcpp")
     add_subdirectory(./gpu)

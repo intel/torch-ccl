@@ -66,6 +66,30 @@ TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("broadcast_", broadcast_xpu_);
 }
 
+#if TORCH_VERSION_MAJOR > 1 && TORCH_VERSION_MINOR >= 1
+// PyTorch 2.1 allreduce support sparse tensor
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> allreduce_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    const c10::optional<at::Tensor>& sparse_indices,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+            ->allreduce(
+              tensor_vec,
+              c10d::AllreduceOptions{
+                  *reduce_op.get(), std::chrono::milliseconds(timeout)});
+
+  // Return input tensors as output tensors to make inplace allreduce look like
+  // a functional API, so that make_fx can correctly build the dependencies in
+  // the graph later.
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(tensor_vec), work);
+}
+#else
+// TODO: Remove after updating to PyTorch 2.1
 std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> allreduce_xpu_(
     at::TensorList tensors,
     const c10::intrusive_ptr<ProcessGroup>& process_group,
@@ -85,6 +109,7 @@ std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> allreduce_xpu
   return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
       std::move(tensor_vec), work);
 }
+#endif
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("allreduce_", allreduce_xpu_);

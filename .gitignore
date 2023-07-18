@@ -28,7 +28,7 @@ oneccl_bindings_for_pytorch/version.py
 ## General
 
 # Debug Shell Script
-*.sh
+# *.sh
 
 # Compiled Object files
 *.slo

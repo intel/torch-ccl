@@ -7,52 +7,38 @@
 #include <sycl/sycl.hpp>
 #include <level_zero/ze_api.h>
 
-#include "cxxopts.hpp"
 #include "ze_exception.hpp"
 #include "allreduce.h"
+#include <chrono>
 
+#define REPEAT 10
 
-static size_t align_up(size_t size, size_t align_sz) {
-    return ((size + align_sz -1) / align_sz) * align_sz;
-}
+int work_only = -1;
+int sync_only = -1;
 
-void *mmap_host(size_t map_size, int dma_buf_fd) {
-  auto page_size = getpagesize();
-  map_size = align_up(map_size, page_size);
-  return mmap(nullptr, map_size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf_fd, 0);
-}
-
-template <typename T>
-bool checkResults(T *ptr, T c, size_t count) {
-  for (int i = 0; i < count; ++ i) {
-    if (*ptr != c) return false;
+int get_work_only(int init_value = 0) {
+  int tmp_work_only = init_value;
+  char *tmp_str = getenv("TORCH_CCL_WORK_ONLY");
+  if (tmp_str) {
+    tmp_work_only = atoi(tmp_str);
   }
-  return true;
+  work_only = tmp_work_only;
+  return tmp_work_only;
 }
+
+int get_sync_only(int init_value = 0) {
+  int tmp_sync_only = init_value;
+  char *tmp_str = getenv("TORCH_CCL_SYNC_ONLY");
+  if (tmp_str) {
+    tmp_sync_only = atoi(tmp_str);
+  }
+  sync_only = tmp_sync_only;
+  return tmp_sync_only;
+}
+
+void act(allreducer<sycl::half>& ar, sycl::queue& queue, void* inout_buffer, uint32_t size);
 
 int main(int argc, char* argv[]) {
-  // parse command line options
-  cxxopts::Options opts(
-      "Fill remote GPU memory",
-      "Exchange IPC handle to next rank (wrap around), and fill received buffer");
-
-  opts.allow_unrecognised_options();
-  opts.add_options()
-    ("c,count", "Data content count", cxxopts::value<size_t>()->default_value("8192"))
-    ("t,type", "Data content type", cxxopts::value<std::string>()->default_value("fp16"))
-    ;
-
-  auto parsed_opts = opts.parse(argc, argv);
-  auto count = parsed_opts["count"].as<size_t>();
-  auto dtype = parsed_opts["type"].as<std::string>();
-
-  size_t alloc_size = 0;
-
-  if (dtype == "fp16")
-    alloc_size = count * sizeof(sycl::half);
-  else if (dtype == "float")
-    alloc_size = count * sizeof(float);
-
   // init section
   auto ret = MPI_Init(&argc, &argv);
   if (ret == MPI_ERR_OTHER) {
@@ -60,60 +46,91 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  if (work_only == -1) {
+    get_work_only(0);
+  }
+  if (sync_only == -1) {
+    get_sync_only(0);
+  }
+
   zeCheck(zeInit(0));
   int rank, world;
 
   MPI_Comm_size(MPI_COMM_WORLD, &world);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  
 
   // rank 0, device 0, subdevice 0
   // rank 1, device 0, subdevice 1
   // rank 2, device 1, subdevice 0
   // ...
   auto queue = currentQueue(rank / 2, rank & 1);
-  allreducer<float> ar;
+  allreducer<sycl::half> ar;
   ar.init(queue, rank, world);
-  // temporal buffer used for allreduce temporal use only.
-  void* buffer = sycl::malloc_device(alloc_size, queue); 
-  queue.fill<float>((float *)buffer, (float)(rank), count); 
-  queue.wait();
-//   void* temp_buffer = NULL;
-  ar.allreduce(queue, buffer, count);
-  // avoid race condition
-  queue.wait();
-  MPI_Barrier(MPI_COMM_WORLD);
 
-  // Check buffer contents
-  void* host_buf = sycl::malloc_host(alloc_size, queue);
-  queue.memcpy(host_buf, buffer, alloc_size);
-  queue.wait();
+  sycl::half* small_buffer = (sycl::half*)sycl::malloc_device(14336 * sizeof(sycl::half), queue);
+  sycl::half* large_buffer = (sycl::half*)sycl::malloc_device(14336 * 32 * sizeof(sycl::half), queue);
 
-  // Or we map the device to host
-//   int dma_buf = 0;
-//   memcpy(&dma_buf, &ipc_handle, sizeof(int));
-//   void *host_buf = mmap_host(alloc_size, dma_buf);
-
-  bool check = false;
-  int32_t sum = world * (world - 1) / 2;
-  if (dtype == "fp16"){
-    check = checkResults((sycl::half *)host_buf, (sycl::half)sum, count);
-    std::cout<<"world:"<<world<<"\nrank:" <<rank <<"\nvalue:"<<((sycl::half *)host_buf)[0]<<std::endl;
-  } else {
-    check = checkResults((float*)host_buf, (float)sum, count);
-    std::cout<<"world:"<<world<<"\nrank:" <<rank <<"\nvalue:"<<((float *)host_buf)[0]<<std::endl;
+  for (int i = 0; i < 140; i++) {
+    act(ar, queue, large_buffer, 14336 * 32);
   }
-    
-  
-  if (check)
-    std::cout<<"Successfully fill remote buffer"<<std::endl;
-  else
-    std::cout<<"Error occured when fill remote buffer"<<std::endl;
+  for (int i = 0; i < 31; i++) {
+    for (int j = 0; j < 140; j++) {
+      act(ar, queue, small_buffer, 14336);
+    }
+  }
+  queue.wait();
 
-  // Clean up, close/put ipc handles, free memory, etc.
-  ar.release(queue);
-  // zeCheck(zeMemPutIpcHandle(l0_ctx, ipc_handle)); /* the API is added after v1.6 */
-  sycl::free(buffer, queue);
-  // sycl::free(host_buf, queue);
-  munmap(host_buf, alloc_size);
+  uint64_t host_time[REPEAT];
+  uint64_t full_time[REPEAT];
+
+  for (int k = 0; k < REPEAT; k++) {
+    MPI_Barrier(MPI_COMM_WORLD);
+    uint64_t start = int64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count());
+
+    for (int i = 0; i < 140; i++) {
+      act(ar, queue, large_buffer, 14336 * 32);
+    }
+    for (int i = 0; i < 31; i++) {
+      for (int j = 0; j < 140; j++) {
+        act(ar, queue, small_buffer, 14336);
+      }
+    }
+    uint64_t host_end = int64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count());
+    queue.wait();
+    uint64_t full_end = int64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count());
+    host_time[k] = host_end - start;
+    full_time[k] = full_end - start;
+  }
+
+  uint64_t total_host_time = 0;
+  uint64_t total_full_time = 0;
+  for (int k = 0; k < REPEAT; k++) {
+    total_host_time += host_time[k];
+    total_full_time += full_time[k];
+  }
+
+  total_host_time /= REPEAT;
+  total_full_time /= REPEAT;
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Finalize();
+
+  std::cout << "Average full time: " << total_full_time << std::endl;
+  std::cout << "Average host time (for reference): " << total_host_time << std::endl;
+  for (int k = 0; k < REPEAT; k++) {
+    std::cout << "  Full time on round " << k << ": " << full_time[k] << std::endl;
+    std::cout << "  Host time on round " << k << " (for reference): " << host_time[k] << std::endl;
+  }
+}
+
+void act(allreducer<sycl::half>& ar, sycl::queue& queue, void* inout_buffer, uint32_t size) {
+  if (work_only != 0) {
+    ar.work_only(queue, inout_buffer, size);
+    return;
+  }
+  if (sync_only != 0) {
+    ar.sync_only(queue, inout_buffer, size);
+    return;
+  }
+  ar.allreduce(queue, inout_buffer, size);
 }

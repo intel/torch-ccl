@@ -40,6 +40,8 @@
 int single_queue = -1;
 int disable_allreduce = -1;
 int gpu_allreduce = -1;
+int work_only = -1;
+int sync_only = -1;
 
 //allreducer<sycl::ext::oneapi::bfloat16, 8, 4096> gpu_allreducer_bf16;
 allreducer<sycl::half, 8, 4096> gpu_allreducer_fp16;
@@ -75,6 +77,27 @@ int get_gpu_allreduce(int init_value = 0) {
   gpu_allreduce = tmp_gpu_allreduce;
   return tmp_gpu_allreduce;
 }
+
+int get_work_only(int init_value = 0) {
+  int tmp_work_only = init_value;
+  char *tmp_str = getenv("TORCH_CCL_WORK_ONLY");
+  if (tmp_str) {
+    tmp_work_only = atoi(tmp_str);
+  }
+  work_only = tmp_work_only;
+  return tmp_work_only;
+}
+
+int get_sync_only(int init_value = 0) {
+  int tmp_sync_only = init_value;
+  char *tmp_str = getenv("TORCH_CCL_SYNC_ONLY");
+  if (tmp_str) {
+    tmp_sync_only = atoi(tmp_str);
+  }
+  sync_only = tmp_sync_only;
+  return tmp_sync_only;
+}
+
 
 #define CCL_KERNEL_SUBMIT(cmd, q) \
 ({bool profile_barrier = (xpu::is_profiler_enabled());                        \
@@ -215,7 +238,12 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   if (disable_allreduce == -1) {
     get_disable_allreduce(0);
   }
-
+  if (work_only == -1) {
+    get_work_only(0);
+  }
+  if (sync_only == -1) {
+    get_sync_only(0);
+  }
   // Create the stream and rank dev mapping
 
   // GPU world size and GPU local rank
@@ -600,6 +628,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
       }
       if (gpu_allreduce != 0 && single_queue != 0) {
         if (input.scalar_type() == at::kHalf && (size_t)input.numel() <= 524288) {
+          if (sync_only != 0) {
+            gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
+            return ret_evt;
+          }
+          if (work_only != 0) {
+            gpu_allreducer_fp16.work_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
+            return ret_evt;
+          }
           gpu_allreducer_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
           return ret_evt;
         }

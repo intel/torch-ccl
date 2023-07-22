@@ -6,14 +6,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=cpp")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat-security")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector")
-# Since 2016 Debian start using RUNPATH instead of normally RPATH, which gave the annoy effect that
-# allow LD_LIBRARY_PATH to override dynamic linking path. Depends on intention of linking priority,
-# change below for best outcome: disable, using RPATH, enable, using RUNPATH
-if (ENABLE_LINKER_RUNPATH)
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--enable-new-dtags")
-else()
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--disable-new-dtags")
-endif()
 
 set(LINUX TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

@@ -683,7 +683,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> pointToPoint(
   attr_t attr = ccl::create_operation_attr<attr_t>();
   const auto devices = get_device_list(inputs);
   std::string key;
-  int p2pRank = 0, p2pTargetRank = 0;
+  int p2pRank = 0;
   bool isSendRecvSelf = false;
 
   int rank_ = pg_ccl.getRank();
@@ -696,14 +696,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> pointToPoint(
     // rank and my peer
     key = get_key_from_devs(devices);
     p2pRank = rank_;
-    p2pTargetRank = peer;
   } else {
     // TODO: single P2P
     // For single P2P, preserve the old two-rank behavior (to avoid perf diff)
     key = get_key_send_recv(rank_, peer);
     p2pRank = rank_ <= peer ? 0 : 1;
     isSendRecvSelf = rank_ == peer;
-    p2pTargetRank = isSendRecvSelf ? 0 : 1 - p2pRank;
   }
 
   auto& comms = get_ccl_fn(pg_ccl, key, devices, op_type, p2pRank, isSendRecvSelf);

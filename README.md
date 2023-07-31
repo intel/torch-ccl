@@ -16,15 +16,15 @@ The table below shows which functions are available for use with CPU / Intel dGP
 
 |                  | CPU   | GPU   |
 | :--------------- | :---: | :---: |
-| `send`           | ×     | ×     |
-| `recv`           | ×     | ×     |
+| `send`           | ×     | √     |
+| `recv`           | ×     | √     |
 | `broadcast`      | √     | √     |
 | `all_reduce`     | √     | √     |
 | `reduce`         | √     | √     |
 | `all_gather`     | √     | √     |
 | `gather`         | √     | √     |
 | `scatter`        | ×     | ×     |
-| `reduce_scatter` | ×     | ×     |
+| `reduce_scatter` | √     | √     |
 | `all_to_all`     | √     | √     |
 | `barrier`        | √     | √     |
 
@@ -96,23 +96,48 @@ The following lunch options are supported in Intel® oneCCL Bindings for PyTorch
    # build with oneCCL from third party
    COMPUTE_BACKEND=dpcpp python setup.py install
    # build without oneCCL
-   BUILD_NO_ONECCL_PACKAGE=ON COMPUTE_BACKEND=dpcpp python setup.py install
+   export INTELONEAPIROOT=${HOME}/intel/oneapi
+   USE_SYSTEM_ONECCL=ON COMPUTE_BACKEND=dpcpp python setup.py install
    ```
 
 ### Install PreBuilt Wheel
 
 Wheel files are avaiable for the following Python versions.
 
-| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
-| :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
-| 1.13              |            | √          | √          | √          | √           |
-| 1.12.100          |            | √          | √          | √          | √           |
-| 1.12.0            |            | √          | √          | √          | √           |
-| 1.11.0            |            | √          | √          | √          | √           |
-| 1.10.0            | √          | √          | √          | √          |             |
+| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
+| :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: |
+| 2.0.100           |            |            | √          | √          | √           | √           |
+| 1.13              |            | √          | √          | √          | √           |             |
+| 1.12.100          |            | √          | √          | √          | √           |             |
+| 1.12.0            |            | √          | √          | √          | √           |             |
+| 1.11.0            |            | √          | √          | √          | √           |             |
+| 1.10.0            | √          | √          | √          | √          |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-whl-stable-cpu
+python -m pip install oneccl_bind_pt==2.0.100 -f https://developer.intel.com/ipex-whl-stable-xpu
+```
+
+### Runtime Dynamic Linking
+
+- If oneccl_bindings_for_pytorch is built without oneCCL and use oneCCL in system, dynamic link oneCCl from oneAPI basekit (recommended usage):
+
+```bash
+source $basekit_root/ccl/latest/env/vars.sh
+```
+
+Note: Make sure you have installed [basekit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/toolkits.html#base-kit) when using Intel® oneCCL Bindings for Pytorch\* on Intel® GPUs.
+
+- If oneccl_bindings_for_pytorch is built with oneCCL from third party or installed from prebuilt wheel:
+Dynamic link oneCCL and Intel MPI libraries:
+
+```bash
+source $(python -c "import oneccl_bindings_for_pytorch as torch_ccl;print(torch_ccl.cwd)")/env/setvars.sh
+```
+
+Dynamic link oneCCL only (not including Intel MPI):
+
+```bash
+source $(python -c "import oneccl_bindings_for_pytorch as torch_ccl;print(torch_ccl.cwd)")/env/vars.sh
 ```
 
 ## Usage
@@ -145,15 +170,12 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ...
 ```
 
-(oneccl_bindings_for_pytorch is installed along with the MPI tool set.)
+(oneccl_bindings_for_pytorch is built without oneCCL, use oneCCL and MPI(if needed) in system)
 
 ```bash
-
-source <oneccl_bindings_for_pytorch_path>/env/setvars.sh
-
-# eg:
-#   $ oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
-#   $ source $oneccl_bindings_for_pytorch_path/env/setvars.sh
+source $basekit_root/ccl/latest/env/vars.sh
+source $basekit_root/mpi/latest/env/vars.sh
+```
 
 mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 ```

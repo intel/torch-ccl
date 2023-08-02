@@ -6,7 +6,7 @@ This repository holds PyTorch bindings maintained by Intel for the Intel® oneAP
 
 [PyTorch](https://github.com/pytorch/pytorch) is an open-source machine learning framework.
 
-[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library) is a library for efficient distributed deep learning training implementing such collectives like `allreduce`, `allgather`, `alltoall`. For more information on oneCCL, please refer to the [oneCCL documentation](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html) and [oneCCL specification](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html).
+[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library) is a library for efficient distributed deep learning training implementing such collectives like `allreduce`, `allgather`, `alltoall`. For more information on oneCCL, please refer to the [oneCCL documentation](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html).
 
 `oneccl_bindings_for_pytorch` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now.
 
@@ -31,11 +31,12 @@ The table below shows which functions are available for use with CPU / Intel dGP
 
 ## Pytorch API Align
 
-We recommend Anaconda as Python package management system. The following is the corresponding branches (tags) of `oneccl_bindings_for_pytorch` and supported Pytorch.
+We recommend using Anaconda as Python package management system. The followings are the corresponding branches (tags) of `oneccl_bindings_for_pytorch` and supported Pytorch.
 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
+   | [v2.0.1](https://github.com/pytorch/pytorch/tree/v2.0.1)        |  [ccl_torch2.0.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.0.100)   |
    | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
    | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
    | [v1.12.0](https://github.com/pytorch/pytorch/tree/v1.12.0)      |  [ccl_torch1.12](https://github.com/intel/torch-ccl/tree/ccl_torch1.12)   |
@@ -45,33 +46,34 @@ We recommend Anaconda as Python package management system. The following is the 
    | [v1.8.1](https://github.com/pytorch/pytorch/tree/v1.8.1)        |  [ccl_torch1.8](https://github.com/intel/torch-ccl/tree/ccl_torch1.8)     |
    | [v1.7.1](https://github.com/pytorch/pytorch/tree/v1.7.1)        |  [ccl_torch1.7](https://github.com/intel/torch-ccl/tree/ccl_torch1.7)     |
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0)        |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)     |
-   | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |   [beta09](https://github.com/intel/torch-ccl/tree/beta09)                |
+   | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |  [beta09](https://github.com/intel/torch-ccl/tree/beta09)                 |
 
 The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.9 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable `alltoall` collective communication primitive. The patch file about these two PRs is in `patches` directory and you can use it directly.
 
 ## Requirements
 
-- Python 3.6 or later and a C++17 compiler
+- Python 3.8 or later and a C++17 compiler
 
-- PyTorch v1.13.0
+- PyTorch v2.0.1
 
 ## Build Option List
 
 The following build options are supported in Intel® oneCCL Bindings for PyTorch*.
 
 | Build Option                        | Default Value  | Description                                                                                         |
-| :---------------------------------: | :------------: | :-------------------------------------------------------------------------------------------------: |
+| :---------------------------------- | :------------- | :-------------------------------------------------------------------------------------------------- |
 | COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
+| USE_SYSTEM_ONECCL                   | OFF            | Use oneCCL library in system                                                                        |
 | CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
-| CCL_SHA_VERSION                     | False          |add git head sha version to Wheel name                                                               |
+| CCL_SHA_VERSION                     | False          | add git head sha version to Wheel name                                                              |
 
 ## Lunch Option List
 
 The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
 
 | Lunch Option                             | Default Value | Description                                                           |
-| :--------------------------------------: | :-----------: | :-------------------------------------------------------------------: |
+| :--------------------------------------- | :------------ | :-------------------------------------------------------------------- |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |
 
@@ -247,6 +249,10 @@ mpirun -n 2 -l python profiling.py
 [1]
 
 ```
+
+## Known Issues
+
+For Point-to-point communication, directly call dist.send/recv after initializing the process group in launch script will trigger runtime error. Because all ranks of the group are expected to participate in this call to create communicators in our current implementation, while dist.send/recv only has a pair of ranks' participation. As a result, dist.send/recv should be used after collective call, which ensures all ranks' participation. The further solution for supporting directly call dist.send/recv after initializing the process group is still under investigation.
 
 ## License
 

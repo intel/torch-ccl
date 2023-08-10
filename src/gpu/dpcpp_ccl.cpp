@@ -35,7 +35,8 @@
 #include <ipex.h>
 
 #include <sycl/sycl.hpp>
-#include "allreduce.h"
+//#include "allreduce.h"
+#include "allreduce_small.h"
 
 int single_queue = -1;
 int disable_allreduce = -1;
@@ -45,8 +46,9 @@ int sync_only = -1;
 
 //allreducer<sycl::ext::oneapi::bfloat16, 8, 4096> gpu_allreducer_bf16;
 allreducer<sycl::half, 8, 4096> gpu_allreducer_fp16;
-allreducer<sycl::half, 8, 4096> gpu_allreducer_fp32;
-allreducer<sycl::half, 8, 4096> gpu_allreducer_bf16;
+allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_fp16;
+allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_fp32;
+allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_bf16;
 
 int get_single_queue(int init_value = 0) {
   int tmp_single_queue = init_value;
@@ -305,8 +307,9 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
 
     //gpu_allreducer_bf16.init(q, local_base_rank, total_rank_size);
     gpu_allreducer_fp16.init(q, local_base_rank, total_rank_size);
-    gpu_allreducer_fp32.init(q, local_base_rank, total_rank_size);    
-    gpu_allreducer_bf16.init(q, local_base_rank, total_rank_size);  
+    gpu_allreducer_small_fp16.init(q, local_base_rank, total_rank_size);
+    gpu_allreducer_small_fp32.init(q, local_base_rank, total_rank_size);    
+    gpu_allreducer_small_bf16.init(q, local_base_rank, total_rank_size);  
   }
 
   // Store the comms to cache
@@ -627,7 +630,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         return ret_evt;
       }
       if (gpu_allreduce != 0 && single_queue != 0) {
-        if (input.scalar_type() == at::kHalf && (size_t)input.numel() <= 524288) {
+        if (input.scalar_type() == at::kHalf) /* && (size_t)input.numel() <= 524288) */ {
+          /*
           if (sync_only != 0) {
             gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
             return ret_evt;
@@ -636,7 +640,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
             gpu_allreducer_fp16.work_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
             return ret_evt;
           }
-          gpu_allreducer_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+          */
+          if ((size_t)input.numel() <= 524288) {
+            gpu_allreducer_small_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+          } else {
+            gpu_allreducer_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
+          }
           return ret_evt;
         }
       }

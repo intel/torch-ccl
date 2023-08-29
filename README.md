@@ -144,13 +144,17 @@ source $(python -c "import oneccl_bindings_for_pytorch as torch_ccl;print(torch_
 
 ## Usage
 
+**Note:** Please `import torch` and `import intel_extension_for_pytorch`, prior to `import oneccl_bindings_for_pytorch`.
+
 example.py
 
 ```python
 
+import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn.parallel
 import torch.distributed as dist
-import oneccl_bindings_for_pytorch
 
 ...
 

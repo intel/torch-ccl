@@ -119,7 +119,7 @@ FlatCheckResult computeLengthsAndCheckFlat(
 
     lengths[i] = length;
 
-    if (isFlat && length != 0 &&
+    if (isFlat && (length != 0 || firstLength != 0) &&
         (!storage.is_alias_of(curTensor.storage()) ||
          curTensor.storage_offset() != firstStorageOffset + offset))
       isFlat = false;

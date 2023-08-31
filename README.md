@@ -1,6 +1,7 @@
 # Intel® oneCCL Bindings for PyTorch (formerly known as torch_ccl)
 
-This repository holds PyTorch bindings maintained by Intel for the Intel® oneAPI Collective Communications Library (oneCCL).
+This repository holds PyTorch bindings maintained by Intel® for the Intel® oneAPI Collective Communications Library (oneCCL).
+`dev/LLM` is a developing branch for extending optimizations to large language models (LLM). We implement SYCL\* `all_reduce` collective for LLM (e.g. BLOOM-176B) inference performance optimization so far.
 
 ## Introduction
 
@@ -117,13 +118,17 @@ python -m pip install oneccl_bind_pt==1.13 -f https://developer.intel.com/ipex-w
 
 ## Usage
 
+**Note:** Please `import torch` and `import intel_extension_for_pytorch`, prior to `import oneccl_bindings_for_pytorch`.
+
 example.py
 
 ```python
 
+import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn.parallel
 import torch.distributed as dist
-import oneccl_bindings_for_pytorch
 
 ...
 

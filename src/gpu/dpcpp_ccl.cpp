@@ -36,21 +36,6 @@
 
 
 
-#define CCL_KERNEL_SUBMIT(cmd, q) \
-({bool profile_barrier = (xpu::is_profiler_enabled());                        \
-    sycl::event start_evt;                                                    \
-    if (profile_barrier) {                                                    \
-      start_evt = q.ext_oneapi_submit_barrier();                              \
-    }                                                                         \
-    CCL_CHECK(cmd);                                                    \
-                                                                              \
-    sycl::event end_evt;                                                      \
-    if (profile_barrier) {                                                    \
-      end_evt = q.ext_oneapi_submit_barrier();                                \
-      xpu::profiler_record("oneccl", start_evt, end_evt);                     \
-    }                          \
-    })
-
 
 namespace oneccl_bindings_for_pytorch
 {
@@ -513,14 +498,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
+          CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
                                              output.data_ptr(),
                                              (size_t) input.numel(),
                                              cclDatatypes.at(input.scalar_type()),
                                              cclOps.at(opts.reduceOp),
                                              comm,
                                              stream,
-                                             attr), stream.get_native());
+                                             attr));
       });
       return ret_evt;
   },
@@ -551,14 +536,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_KERNEL_SUBMIT(ret_evt = ccl::reduce(input.data_ptr(),
+        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
                                 output.data_ptr(),
                                 (size_t) input.numel(),
                                 cclDatatypes.at(input.scalar_type()),
                                 cclOps.at(opts.reduceOp),
                                 root,
                                 comm,
-                                stream), stream.get_native());
+                                stream));
       });
       return ret_evt;
 
@@ -602,13 +587,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_b
 
             ccl::event ret_evt;
             call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-              CCL_KERNEL_SUBMIT(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+              CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
                                                       output.data_ptr(),
                                                       (size_t) output.numel(),
                                                       cclDatatypes.at(input.scalar_type()),
                                                       cclOps.at(opts.reduceOp),
                                                       comm,
-                                                      stream), stream.get_native());
+                                                      stream));
             });
             return ret_evt;
 
@@ -640,13 +625,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_KERNEL_SUBMIT(ret_evt = ccl::broadcast(input.data_ptr(),
+          CCL_CHECK(ret_evt = ccl::broadcast(input.data_ptr(),
                                              (size_t) input.numel(),
                                              cclDatatypes.at(input.scalar_type()),
                                              root,
                                              comm,
                                              stream,
-                                             attr), stream.get_native());
+                                             attr));
       });
       return ret_evt;
     },
@@ -692,13 +677,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_(std::v
                      });
 
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_KERNEL_SUBMIT(ret_evt = ccl::allgatherv(input.data_ptr(),
+        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
                                   (size_t) input.numel(),
                                   recvBufs,
                                   recvCounts,
                                   cclDatatypes.at(input.scalar_type()),
                                   comm,
-                                  stream), stream.get_native());
+                                  stream));
       });
 
       return ret_evt;
@@ -740,13 +725,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_allgather_base_(
 
             ccl::event ret_evt;
             call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-              CCL_KERNEL_SUBMIT(ret_evt = ccl::allgatherv(input.data_ptr(),
+              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
                                          (size_t) input.numel(),
                                          output.data_ptr(),
                                          recvCounts,
                                          cclDatatypes.at(input.scalar_type()),
                                          comm,
-                                         stream), stream.get_native());
+                                         stream));
             });
             return ret_evt;
           },
@@ -816,13 +801,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
 
               ccl::event ret_evt;
               call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                  CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr(),
+                  CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr(),
                                                      sendCounts,
                                                      flatOutput.data_ptr(),
                                                      recvCounts,
                                                      cclDatatypes.at(flatOutput.scalar_type()),
                                                      comm,
-                                                     stream), stream.get_native());
+                                                     stream));
               });
 
               // TODO : add to post and pre hooks
@@ -885,13 +870,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 ccl::event ret_evt;
 
                 call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                    CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoall(input.data_ptr(),
+                    CCL_CHECK(ret_evt = ccl::alltoall(input.data_ptr(),
                                                       output.data_ptr(),
                                                       (size_t)output.numel() / comm.size(),
                                                       cclDatatypes.at(output.scalar_type()),
                                                       comm,
                                                       stream,
-                                                      attr), stream.get_native());
+                                                      attr));
                 });
 
                 return ret_evt;
@@ -930,14 +915,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_base_(at
                 }
 
                 call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                    CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(input.data_ptr(),
+                    CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr(),
                                                        sendCounts,
                                                        output.data_ptr(),
                                                        recvCounts,
                                                        cclDatatypes.at(output.scalar_type()),
                                                        comm,
                                                        stream,
-                                                       attr), stream.get_native());
+                                                       attr));
                 });
                 return ret_evt;
             },
@@ -1001,13 +986,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::alltoall_(std::ve
 
               ccl::event ret_evt;
               call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                  CCL_KERNEL_SUBMIT(ret_evt = ccl::alltoallv(flatInput.data_ptr(),
+                  CCL_CHECK(ret_evt = ccl::alltoallv(flatInput.data_ptr(),
                                                      sendCounts,
                                                      flatOutput.data_ptr(),
                                                      recvCounts,
                                                      cclDatatypes.at(flatOutput.scalar_type()),
                                                      comm,
-                                                     stream), stream.get_native());
+                                                     stream));
               });
 
               if (!isOutputFlat) {
@@ -1057,13 +1042,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::send_(std::vector
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_KERNEL_SUBMIT(ret_evt = ccl::send(input.data_ptr(),
+          CCL_CHECK(ret_evt = ccl::send(input.data_ptr(),
                                              (size_t) input.numel(),
                                              cclDatatypes.at(input.scalar_type()),
                                              dst,
                                              comm,
                                              stream,
-                                             attr), stream.get_native());
+                                             attr));
       });
       return ret_evt;
   },
@@ -1100,13 +1085,13 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::recv_(std::vector
 
       ccl::event ret_evt;
       call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_KERNEL_SUBMIT(ret_evt = ccl::recv(output.data_ptr(),
+          CCL_CHECK(ret_evt = ccl::recv(output.data_ptr(),
                                              (size_t) output.numel(),
                                              cclDatatypes.at(output.scalar_type()),
                                              src,
                                              comm,
                                              stream,
-                                             attr), stream.get_native());
+                                             attr));
       });
       return ret_evt;
   },

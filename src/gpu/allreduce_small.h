@@ -1023,14 +1023,22 @@ private:
         memset(recv_buf, 0, sizeof(recv_buf));
         // Overkill if we don't really needs all peer's handles
         //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-MPI_Allgather\n", rank);
+#ifndef __NR_pidfd_getfd
         MPI_Allgather(
             &send_buf, sizeof(send_buf), MPI_BYTE, recv_buf, sizeof(send_buf), MPI_BYTE, MPI_COMM_WORLD);
+#else
+        int rank, world;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_rank(MPI_COMM_WORLD, &world);
+        un_allgather(&send_buf, recv_buf, rank, world);
+#endif
 
         
         //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-forloop\n", rank);
         for (uint32_t i = 0; i < world; i++){
             // Step 4: Prepare pid file descriptor of next process
             auto* peer = recv_buf + i;
+#if defined(__NR_pidfd_getfd)
             //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-forloop%d-__NR_pidfd_open\n", rank, i);
             auto pid_fd = syscall(__NR_pidfd_open, peer->pid, 0);
             sysCheck(pid_fd);
@@ -1041,6 +1049,7 @@ private:
             //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-forloop%d-__NR_pidfd_getfd\n", rank, i);
             peer->fd = syscall(__NR_pidfd_getfd, pid_fd, peer->fd, 0);
             sysCheck(peer->fd);
+#endif
 
             // Step 6: Open IPC handle of remote peer
             //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-forloop%d-get_native\n", rank, i);

@@ -230,7 +230,7 @@ if __name__ == '__main__':
                 'include/*.h*',
                 'lib/lib*',
                 'lib/prov/lib*',
-                'lib/kernels/*',
+                'lib/ccl/kernels/*',
                 'licensing/*',
                 'modulefiles/*',
             ]},

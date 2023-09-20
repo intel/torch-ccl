@@ -116,6 +116,25 @@ int get_sync_only(int init_value = 0) {
     }                          \
     })
 
+namespace
+{
+    // Now our LLM models include GPT-J, LLaMa2, OPT and Bloom.
+    static std::set<int> llm_numels = {131072, 16384, 4096, 163840, 4194304, 
+                                    20480, 5242880, 5120, 262144, 32768, 
+                                    8388608, 7340032, 135168, 8192, 4210688, 
+                                    28672, 57344, 14737408, 473088, 14336, 
+                                    7168, 229376};
+
+    bool use_llm_allreduce(const at::Tensor& input, const int world_size) {
+        if (input.scalar_type() == at::kHalf && 
+            world_size <= 8 && 
+            llm_numels.count(input.numel())) {
+            return true;
+        }
+        return false;
+    }
+} // namespace
+
 
 namespace oneccl_bindings_for_pytorch
 {
@@ -614,6 +633,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
                                                                        ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  const int world_size = pg_ccl.getSize();
   work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
@@ -630,7 +650,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         return ret_evt;
       }
       if (gpu_allreduce != 0 && single_queue != 0) {
-        if (input.scalar_type() == at::kHalf) /* && (size_t)input.numel() <= 524288) */ {
+        if (use_llm_allreduce(input, world_size)) /* && (size_t)input.numel() <= 524288) */ {
           /*
           if (sync_only != 0) {
             gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  

@@ -1226,9 +1226,6 @@ private:
         // Step 3: Exchange the handles and offsets
         memset(recv_buf, 0, sizeof(recv_buf));
         // Overkill if we don't really needs all peer's handles
-        int rank, world;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &world);
         un_allgather(&send_buf, recv_buf, rank, world);
 
         for (uint32_t i = 0; i < world; i++)

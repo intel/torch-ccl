@@ -1013,7 +1013,7 @@ private:
         alignas(64) exchange_contents recv_buf[world];
 
         // fill in the exchange info
-        //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-zeMemGetIpcHandle\n", rank);
+        // printf("DEBUG rank%d: init-exchange_peer_ipc_mem-zeMemGetIpcHandle\n", rank);
         zeCheck(zeMemGetIpcHandle(l0_ctx, base_addr, &send_buf.ipc_handle));
         send_buf.offset = (char*)ptr - (char*)base_addr;
         send_buf.pid = getpid();
@@ -1023,12 +1023,8 @@ private:
         memset(recv_buf, 0, sizeof(recv_buf));
         // Overkill if we don't really needs all peer's handles
         //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-MPI_Allgather\n", rank);
-        int rank, world;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_rank(MPI_COMM_WORLD, &world);
         un_allgather(&send_buf, recv_buf, rank, world);
 
-        
         //printf("DEBUG rank%d: init-exchange_peer_ipc_mem-forloop\n", rank);
         for (uint32_t i = 0; i < world; i++){
             // Step 4: Prepare pid file descriptor of next process

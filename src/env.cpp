@@ -8,14 +8,11 @@
  * ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB:          Default = 0, Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching
  */
 
-#define ONECCL_BINDINGS_FOR_PYTORCH_ENV_TYPE_DEF(var)                                     \
-    int var = [&]() -> int {                                            \
-      auto env = std::getenv("ONECCL_BINDINGS_FOR_PYTORCH_" #var);                        \
-      int _##var = 0;                                                   \
-      try {                                                             \
-        _##var = std::stoi(env, 0, 10);                                 \
-      } catch (...) { /* Do Nothing */ }                                \
-      return _##var;                                                    \
+#define ONECCL_BINDINGS_FOR_PYTORCH_ENV_TYPE_DEF(var) \
+    int var = [&]() -> int { \
+      if (auto env = std::getenv("ONECCL_BINDINGS_FOR_PYTORCH_" #var)) \
+        return std::stoi(env, 0, 10); \
+      return 0; \
     } ()
 
 int oneccl_bindings_for_pytorch_env(int env_type) {

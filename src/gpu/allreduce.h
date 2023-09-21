@@ -1226,31 +1226,15 @@ private:
         // Step 3: Exchange the handles and offsets
         memset(recv_buf, 0, sizeof(recv_buf));
         // Overkill if we don't really needs all peer's handles
-#ifndef __NR_pidfd_getfd
-        MPI_Allgather(
-            &send_buf, sizeof(send_buf), MPI_BYTE,
-            recv_buf, sizeof(send_buf), MPI_BYTE, MPI_COMM_WORLD);
-#else
         int rank, world;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &world);
         un_allgather(&send_buf, recv_buf, rank, world);
-#endif
 
         for (uint32_t i = 0; i < world; i++)
         {
             // Step 4: Prepare pid file descriptor of next process
             auto* peer = recv_buf + i;
-#if defined(__NR_pidfd_getfd)
-            auto pid_fd = syscall(__NR_pidfd_open, peer->pid, 0);
-            sysCheck(pid_fd);
-            //
-            // Step 5: Duplicate GEM object handle to local process
-            // and overwrite original file descriptor number
-            //
-            peer->fd = syscall(__NR_pidfd_getfd, pid_fd, peer->fd, 0);
-            sysCheck(peer->fd);
-#endif
             // Step 6: Open IPC handle of remote peer
             auto l0_device
                 = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(queue.get_device());

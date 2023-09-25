@@ -25,14 +25,29 @@ option(USE_SYSTEM_ONECCL "Use oneCCL library in system" OFF)
 
 option(BUILD_NO_ONECCL_PACKAGE "Build with oneCCL excluded" OFF)
 
+set(DEPENDS_LIB)
+
 # Find the Torch lib
 find_package(Torch REQUIRED)
+list(APPEND DEPENDS_LIB torch)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 # Find OneCCL Lib
-set(DEPENDS_LIB)
-find_package(oneCCL REQUIRED)
-list(APPEND DEPENDS_LIB oneCCL torch)
+IF (USE_SYSTEM_ONECCL)
+    # Find and link MPI lib
+    find_package(MPI REQUIRED)
+    list(APPEND DEPENDS_LIB ${MPI_LIBRARIES})
+
+    # Link CCL lib
+    set(CCL_ROOT $ENV{CCL_ROOT})
+    set(CCL_CONFIGURATION_PATH $ENV{CCL_CONFIGURATION_PATH})
+    include_directories(${CCL_ROOT}/include)
+    list(APPEND DEPENDS_LIB "${CCL_ROOT}/lib/${CCL_CONFIGURATION_PATH}/libccl.so")
+ELSE()
+    # Find OneCCL Lib
+    find_package(oneCCL REQUIRED)
+    list(APPEND DEPENDS_LIB oneCCL)
+ENDIF()
 
 SET(LIB_NAME "oneccl_bindings_for_pytorch")
 

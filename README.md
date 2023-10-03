@@ -116,7 +116,7 @@ Wheel files are avaiable for the following Python versions.
 | 1.10.0            | √          | √          | √          | √          |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==2.0.100 -f https://developer.intel.com/ipex-whl-stable-xpu
+python -m pip install oneccl_bind_pt==2.0.100 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
 ```
 
 ### Runtime Dynamic Linking

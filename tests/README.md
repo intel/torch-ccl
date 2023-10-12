@@ -56,3 +56,8 @@ python testccl_gpu.py
 
 Note this unit test is a stress test with a long time to start. You may need to wait ~5min to get the log "starting to initialize tensors ...".
 
+## Test Functionality of FSDP
+```bash
+export CCL_ZE_IPC_EXCHANGE=sockets # for pytorch multiprocessing launch
+python test_fsdp.py
+```

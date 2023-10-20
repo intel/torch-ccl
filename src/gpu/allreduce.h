@@ -546,7 +546,7 @@ public:
         // temporal buffer used for allreduce temporal use only.
         data_size_per_buffer = ((MAX_COUNT + SIMD_ATOMIC * SIMD_INIT - 1) / (SIMD_ATOMIC * SIMD_INIT)) * SIMD_ATOMIC * SIMD_INIT;
         size_per_buffer = data_size_per_buffer * sizeof(data_type) + (SYNC_BYTE + SIMD_ATOMIC * SIMD_INIT * sizeof(data_type) - 1) / (SIMD_ATOMIC * SIMD_INIT * sizeof(data_type)) * SIMD_ATOMIC * SIMD_INIT * sizeof(data_type);
-        void* local_buffer = sycl::malloc_shared(size_per_buffer * BUFFER_COUNT, queue);
+        void* local_buffer = sycl::malloc_device(size_per_buffer * BUFFER_COUNT, queue);
         int data_size_per_buffer_kernel = data_size_per_buffer;
         int size_per_buffer_kernel = size_per_buffer / sizeof(data_type);
 

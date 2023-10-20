@@ -68,7 +68,7 @@ public:
         size_per_buffer = data_size_per_buffer * sizeof(data_type) + SMALL_SYNC_BYTE;
         int size_per_buffer_kernel = size_per_buffer;
         //printf("DEBUG rank%d: init-malloc_shared\n", rank);
-        void* local_triple_buffer = sycl::malloc_shared(size_per_buffer * TRIPLE_BUFFER, queue);
+        void* local_triple_buffer = sycl::malloc_device(size_per_buffer * TRIPLE_BUFFER, queue);
 
         uint32_t total_threads_needed = (SMALL_SYNC_BYTE /sizeof(data_type) + SIMD - 1) / SIMD;
         int wg_size = 1;

@@ -38,9 +38,7 @@
 //#include "allreduce.h"
 #include "allreduce_small.h"
 
-int single_queue = -1;
 int disable_allreduce = -1;
-int gpu_allreduce = -1;
 int work_only = -1;
 int sync_only = -1;
 
@@ -50,15 +48,6 @@ allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_fp16;
 allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_fp32;
 allreducer_small<sycl::half, 8, 4096> gpu_allreducer_small_bf16;
 
-int get_single_queue(int init_value = 0) {
-  int tmp_single_queue = init_value;
-  char *tmp_str = getenv("TORCH_CCL_SINGLE_QUEUE");
-  if (tmp_str) {
-    tmp_single_queue = atoi(tmp_str);
-  }
-  single_queue = tmp_single_queue;
-  return tmp_single_queue;
-}
 
 int get_disable_allreduce(int init_value = 0) {
   int tmp_disable_allreduce = init_value;
@@ -70,15 +59,6 @@ int get_disable_allreduce(int init_value = 0) {
   return tmp_disable_allreduce;
 }
 
-int get_gpu_allreduce(int init_value = 0) {
-  int tmp_gpu_allreduce = init_value;
-  char *tmp_str = getenv("TORCH_CCL_GPU_ALLREDUCE");
-  if (tmp_str) {
-    tmp_gpu_allreduce = atoi(tmp_str);
-  }
-  gpu_allreduce = tmp_gpu_allreduce;
-  return tmp_gpu_allreduce;
-}
 
 int get_work_only(int init_value = 0) {
   int tmp_work_only = init_value;
@@ -118,17 +98,48 @@ int get_sync_only(int init_value = 0) {
 
 namespace
 {
-    // Now our LLM models include GPT-J, LLaMa2, OPT and Bloom.
-    static std::set<int> llm_numels = {131072, 16384, 4096, 163840, 4194304, 
-                                    20480, 5242880, 5120, 262144, 32768, 
-                                    8388608, 7340032, 135168, 8192, 4210688, 
-                                    28672, 57344, 14737408, 473088, 14336, 
-                                    7168, 229376};
+    int use_llm_allreduce =  0;
+    bool support_fp64 = false;
+    int eu_count = 0;
 
-    bool use_llm_allreduce(const at::Tensor& input, const int world_size) {
-        if (input.scalar_type() == at::kHalf && 
-            world_size <= 8 && 
-            llm_numels.count(input.numel())) {
+    c10::Stream llm_torch_stream(c10::Stream::DEFAULT, c10::Device(c10::DeviceType::XPU, 0));
+    void initialize_llm_allreduce(c10d::ProcessGroupCCL& pg_ccl, const std::vector<at::Device>& devices) {
+        char *use_llm_allreduce_str = getenv("TORCH_LLM_ALLREDUCE");
+        if (use_llm_allreduce_str) {
+            use_llm_allreduce = atoi(use_llm_allreduce_str);
+        }
+        if (use_llm_allreduce != 0) {
+            // Initialize stream.
+            c10::impl::VirtualGuardImpl impl(devices[0].type());
+            llm_torch_stream = impl.getStream(devices[0]);
+        }
+    }
+
+    int get_local_size() {
+        // Currently, we only support intel mpi and mpich as launcher for LLM allreduce
+        // Try to get intel mpi environment firstly.
+        char *impi_local_size_str = getenv("MPI_LOCALNRANKS");
+        int local_world_size = 0;
+        if (impi_local_size_str) {
+            local_world_size = atoi(impi_local_size_str);
+        } else {
+            // Try mpich environment.
+            char *mpich_local_size_str = getenv("PALS_LOCAL_SIZE");
+            local_world_size = atoi(mpich_local_size_str);
+        }
+        return local_world_size;
+    }
+
+    bool llm_allreduce_available(const at::Tensor& input, const int world_size, const int local_world_size, const c10d::AllreduceOptions& opts) {
+        // LLM allreduce only support PVC platform with 512 EUs. 
+        if (support_fp64 && 
+            eu_count == 512 && 
+            use_llm_allreduce !=0 &&
+            opts.reduceOp == c10d::ReduceOp::SUM &&
+            input.scalar_type() == at::kHalf &&
+            world_size <= 8 &&
+            local_world_size > 0 &&
+            local_world_size <= world_size) {
             return true;
         }
         return false;
@@ -250,12 +261,6 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   std::vector<c10::Stream> torch_streams;
   torch_streams.reserve(devices.size());
 
-  if (single_queue == -1) {
-    get_single_queue(1);
-  }
-  if (gpu_allreduce == -1) {
-    get_gpu_allreduce(1);
-  }
   if (disable_allreduce == -1) {
     get_disable_allreduce(0);
   }
@@ -284,27 +289,17 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     }
 
     c10::impl::VirtualGuardImpl impl(devices[i].type());
-    if (single_queue == 0) {
-      // XPU doesn't support prioritized stream.
-      c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
-      torch_streams.push_back(stream);
 
-      auto q = xpu::get_queue_from_stream(stream);
-      ccl_streams.push_back(ccl::create_stream(q));
+    // XPU doesn't support prioritized stream.
+    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+    torch_streams.push_back(stream);
 
-      int rank = local_base_rank + i;
-      devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
-    } else {
-      c10::Stream stream = impl.getStream(devices[i]);
-      torch_streams.push_back(stream);
+    auto q = xpu::get_queue_from_stream(stream);
+    ccl_streams.push_back(ccl::create_stream(q));
 
-      auto q = xpu::get_queue_from_stream(stream);
-      ccl_streams.push_back(ccl::create_stream(q));
+    int rank = local_base_rank + i;
+    devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
 
-      int rank = local_base_rank + i;
-      devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
-
-    }
   }
 
   // The IPEX use default global context.
@@ -317,7 +312,8 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   // Create ccl::communicators
   auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
 
-  if (gpu_allreduce != 0) {
+  // Always initialize llm reducer here.
+  {
     total_rank_size = pg_ccl.getSize();
     local_base_rank = pg_ccl.getRank();
 
@@ -328,7 +324,13 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     gpu_allreducer_fp16.init(q, local_base_rank, total_rank_size);
     gpu_allreducer_small_fp16.init(q, local_base_rank, total_rank_size);
     gpu_allreducer_small_fp32.init(q, local_base_rank, total_rank_size);    
-    gpu_allreducer_small_bf16.init(q, local_base_rank, total_rank_size);  
+    gpu_allreducer_small_bf16.init(q, local_base_rank, total_rank_size);
+
+    // Get device properity.
+    auto dev = q.get_device();
+    support_fp64 = dev.has(sycl::aspect::fp64);
+    eu_count = dev.has(sycl::aspect::ext_intel_gpu_eu_count) ? dev.get_info<sycl::ext::intel::info::device::gpu_eu_count>():512;
+    // std::cout << "support_fp64: "<<support_fp64<<", eu_count: " << eu_count << std::endl;
   }
 
   // Store the comms to cache
@@ -352,10 +354,11 @@ public:
              const char* profilingTitle,
              const c10::optional<std::vector<at::Tensor>>& inputTensors) :
              CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
-                     inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
+                     inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors), 
+                     is_allreduce(opType == c10d::OpType::ALLREDUCE) {}
 
   void run() override {
-    if (single_queue == 0) {
+    if (!is_allreduce || use_llm_allreduce == 0) {
       const auto devices = get_device_list(this->inputs);
 
       // add SYCL running dependency computation -> communication.
@@ -389,14 +392,14 @@ public:
   }
 
   void finishAsyncWorkCCL() override {
-    if (single_queue == 0) {
+    if (!is_allreduce || use_llm_allreduce == 0) {
       c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
     }
     // under the stream guard. Mark the Future completing.
     this->AsyncWorkCCL::finishAsyncWorkCCL();
   }
 private:
-
+    bool is_allreduce;
 };
 
 template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
@@ -418,12 +421,10 @@ public:
                      inputs, outputs, peer, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors) {}
 
   void run() override {
-
-    if (single_queue == 0) {
-      const auto devices = get_device_list(this->inputs);
-      // add SYCL running dependency computation -> communication.
-      sync_streams(devices, this->comms.torch_streams);
-      for (const auto i : c10::irange(this->inputs.size())) {
+    const auto devices = get_device_list(this->inputs);
+    // add SYCL running dependency computation -> communication.
+    sync_streams(devices, this->comms.torch_streams);
+    for (const auto i : c10::irange(this->inputs.size())) {
         // Both `inputs' and `outputs' are created on a worker stream and used in
         // different ncclStreams.  Hence, both must record the ncclStream to
         // prevent being freed before the collective finishes.
@@ -433,9 +434,7 @@ public:
         //
         // See [Sync Streams].
         record_tensor(this->inputs[i], this->comms.torch_streams[i]);
-      }
     }
-
 
     P2PAsyncWork<RunF, CommType, InputType, OutputType, attr_t>::run();
   };
@@ -452,9 +451,7 @@ public:
   }
 
   void finishAsyncWorkCCL() override {
-    if (single_queue == 0) {
-      c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
-    }
+    c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
     // under the stream guard. Mark the Future completing.
     this->AsyncWorkCCL::finishAsyncWorkCCL();
   }
@@ -634,6 +631,10 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
   checkGPUTensor(tensors);
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   const int world_size = pg_ccl.getSize();
+  const int local_world_size = get_local_size();
+  const auto devices = get_device_list(tensors);
+  initialize_llm_allreduce(pg_ccl, devices);
+
   work = collective<get_ccl_comms, XPUWorkCCL>(
     pg_ccl,
     tensors,
@@ -649,51 +650,40 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
       if (disable_allreduce != 0) {
         return ret_evt;
       }
-      if (gpu_allreduce != 0 && single_queue != 0) {
-        if (use_llm_allreduce(input, world_size)) /* && (size_t)input.numel() <= 524288) */ {
-          /*
-          if (sync_only != 0) {
-            gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
-            return ret_evt;
-          }
-          if (work_only != 0) {
-            gpu_allreducer_fp16.work_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
-            return ret_evt;
-          }
-          */
-          if ((size_t)input.numel() <= 524288) {
-            gpu_allreducer_small_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
-          } else {
-            gpu_allreducer_fp16.allreduce(stream.get_native(), input.data_ptr(), (size_t)input.numel());
-          }
-          return ret_evt;
+
+      if (llm_allreduce_available(input, world_size, local_world_size, opts)) {
+        auto q = xpu::get_queue_from_stream(llm_torch_stream);
+        /*
+        if (sync_only != 0) {
+        gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
+        return ret_evt;
         }
-      }
-      ccl::event tmp_ret_evt;
-      if (single_queue == 0) {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-            CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
-                                              output.data_ptr(),
-                                              (size_t) input.numel(),
-                                              cclDatatypes.at(input.scalar_type()),
-                                              cclOps.at(opts.reduceOp),
-                                              comm,
-                                              stream,
-                                              attr), stream.get_native());
-        });
-      } else {
-        call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-            CCL_KERNEL_SUBMIT(tmp_ret_evt = ccl::allreduce(input.data_ptr(),
-                                              output.data_ptr(),
-                                              (size_t) input.numel(),
-                                              cclDatatypes.at(input.scalar_type()),
-                                              cclOps.at(opts.reduceOp),
-                                              comm,
-                                              stream,
-                                              attr), stream.get_native());
+        if (work_only != 0) {
+        gpu_allreducer_fp16.work_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  
+        return ret_evt;
+        }
+        */
+        if ((size_t)input.numel() <= 524288) {
+            gpu_allreducer_small_fp16.allreduce(q, input.data_ptr(), (size_t)input.numel());
+        } else {
+            gpu_allreducer_fp16.allreduce(q, input.data_ptr(), (size_t)input.numel());
+        }
+        // printf("Use LLM allreduce.\n");
+        return ret_evt;
+    }
+
+    call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+        CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
+                                            output.data_ptr(),
+                                            (size_t) input.numel(),
+                                            cclDatatypes.at(input.scalar_type()),
+                                            cclOps.at(opts.reduceOp),
+                                            comm,
+                                            stream,
+                                            attr), stream.get_native());
       });
-      }
-      return ret_evt;
+    // printf("Use One CCL allreduce.\n");
+    return ret_evt;
   },
   c10d::OpType::ALLREDUCE);
 

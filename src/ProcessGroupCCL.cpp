@@ -308,7 +308,6 @@ std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
 
   return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
 }
-}
 #else
 std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
     at::Tensor& output_tensor,

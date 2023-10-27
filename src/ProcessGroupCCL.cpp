@@ -180,6 +180,21 @@ TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("allgather_", allgather_xpu_);
 }
 
+// pytorch 2.2 above
+#if TORCH_VERSION_MAJOR > 1 && TORCH_VERSION_MINOR > 1
+std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _allgather_base_xpu_(
+    at::Tensor& output_tensor,
+    at::Tensor& input_tensor,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    bool asyncOp,
+    int64_t timeout) {
+  auto work = process_group->getBackend(c10::DeviceType::XPU)
+                  ->_allgather_base(output_tensor,
+                                    input_tensor,
+                                    AllgatherOptions{std::chrono::milliseconds(timeout), asyncOp});
+  return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
+}
+#else
 std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _allgather_base_xpu_(
     at::Tensor& output_tensor,
     at::Tensor& input_tensor,
@@ -189,6 +204,7 @@ std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _allgather_base_xpu_(
 
   return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
 }
+#endif
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("_allgather_base_", _allgather_base_xpu_);
@@ -273,6 +289,26 @@ TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("reduce_scatter_", reduce_scatter_xpu_);
 }
 
+// pytorch 2.2 above
+#if TORCH_VERSION_MAJOR > 1 && TORCH_VERSION_MINOR > 1
+std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
+    at::Tensor& output_tensor,
+    at::Tensor& input_tensor,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    bool asyncOp,
+    int64_t timeout) {
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->_reduce_scatter_base(
+              output_tensor,
+              input_tensor,
+              ReduceScatterOptions{
+                  *reduce_op.get(), std::chrono::milliseconds(timeout), asyncOp});
+
+  return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
+}
+#else
 std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
     at::Tensor& output_tensor,
     at::Tensor& input_tensor,
@@ -289,6 +325,7 @@ std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
 
   return std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>>(output_tensor, work);
 }
+#endif
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("_reduce_scatter_base_", _reduce_scatter_base_xpu_);

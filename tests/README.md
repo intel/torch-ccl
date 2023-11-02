@@ -56,6 +56,14 @@ python testccl_gpu.py
 
 Note this unit test is a stress test with a long time to start. You may need to wait ~5min to get the log "starting to initialize tensors ...".
 
+## allreduce of LLM path
+This test case goes to special path for allreduce operation on xpu device if launched rank(-np) <= 8. Run:
+```bash
+mpirun -np 2 python test_llm_allreduce.py
+```
+If you want to disable this path and use oneCCL allreduce instead, set TORCH_CCL_GPU_ALLREDUCE to 0. Run:
+```bash
+TORCH_CCL_GPU_ALLREDUCE=0 mpirun -np 2 python test_llm_allreduce.py
 ## Test Functionality of FSDP
 ```bash
 export CCL_ZE_IPC_EXCHANGE=sockets # for pytorch multiprocessing launch

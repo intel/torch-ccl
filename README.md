@@ -1,6 +1,6 @@
 # Intel® oneCCL Bindings for PyTorch (formerly known as torch_ccl)
 
-This repository holds PyTorch bindings maintained by Intel for the Intel® oneAPI Collective Communications Library (oneCCL).
+This repository holds PyTorch bindings maintained by Intel® for the Intel® oneAPI Collective Communications Library (oneCCL).
 
 ## Introduction
 

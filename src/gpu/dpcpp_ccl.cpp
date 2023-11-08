@@ -339,10 +339,8 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   if (use_llm_allreduce != 0){
     std::call_once(allreducer_initialize_flag, init_llm_allreducer, pg_ccl, devices);
     std::cout << "Allreduce goes to LLM path." << std::endl;
-  } else {
-    std::cout << "Allreduce goes to oneCCL path." << std::endl;
   }
-
+  
   // Store the comms to cache
   std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
   pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);

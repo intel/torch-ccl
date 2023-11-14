@@ -43,7 +43,27 @@ namespace c10d
 {
 
 namespace ops {
+// pytorch 2.2 above
+#if TORCH_VERSION_MAJOR > 1 && TORCH_VERSION_MINOR > 1
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> broadcast_xpu_(
+    at::TensorList tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t root_rank,
+    int64_t root_tensor,
+    bool asyncOp,
+    int64_t timeout) {
+  auto tensor_vec = tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->broadcast(
+              tensor_vec,
+              BroadcastOptions{
+                  root_rank, root_tensor, std::chrono::milliseconds(timeout), asyncOp});
 
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(tensor_vec), work);
+}
+#else
 std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> broadcast_xpu_(
     at::TensorList tensors,
     const c10::intrusive_ptr<ProcessGroup>& process_group,
@@ -61,6 +81,7 @@ std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> broadcast_xpu
   return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
       std::move(tensor_vec), work);
 }
+#endif
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("broadcast_", broadcast_xpu_);
@@ -243,6 +264,27 @@ TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("gather_", gather_xpu_);
 }
 
+// pytorch 2.2 above
+#if TORCH_VERSION_MAJOR > 1 && TORCH_VERSION_MINOR > 1
+std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> scatter_xpu_(
+    const at::TensorList& output_tensors,
+    const std::vector<std::vector<at::Tensor>>& input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t root_rank,
+    bool asyncOp,
+    int64_t timeout) {
+  auto output_tensors_vec = output_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::XPU)
+          ->scatter(
+              output_tensors_vec,
+              const_cast<std::vector<std::vector<at::Tensor>>&>(input_tensors),
+              ScatterOptions{root_rank, std::chrono::milliseconds(timeout), asyncOp});
+
+  return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
+      std::move(output_tensors_vec), work);
+}
+#else
 std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> scatter_xpu_(
     const at::TensorList& output_tensors,
     const std::vector<std::vector<at::Tensor>>& input_tensors,
@@ -260,6 +302,7 @@ std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>> scatter_xpu_(
   return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<C10D_Work>>(
       std::move(output_tensors_vec), work);
 }
+#endif
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("scatter_", scatter_xpu_);

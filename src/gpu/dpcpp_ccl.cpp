@@ -154,9 +154,7 @@ namespace
     }
 
     bool llm_allreduce_available(const at::Tensor& input, const int world_size, const int local_world_size, const c10d::AllreduceOptions& opts) {
-        // LLM allreduce only support PVC platform with 512 EUs. 
-        if (support_fp64 && 
-            eu_count == 512 && 
+        if (support_fp64 &&
             use_llm_allreduce !=0 &&
             opts.reduceOp == c10d::ReduceOp::SUM &&
             input.scalar_type() == at::kHalf &&
@@ -671,7 +669,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         return ret_evt;
         }
         */
-        if ((size_t)input.numel() <= 524288) {
+        // Now SMALL_MAX_COUNT is 448K(448 * 1024).
+        if ((size_t)input.numel() <= SMALL_MAX_COUNT) {
             gpu_allreducer_small_fp16.allreduce(q, input.data_ptr(), (size_t)input.numel());
         } else {
             gpu_allreducer_fp16.allreduce(q, input.data_ptr(), (size_t)input.numel());

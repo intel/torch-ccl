@@ -26,9 +26,8 @@
 #define SIMD_ATOMIC 32
 #define BUFFER_COUNT 2
 #define SYNC_BYTE (SIMD_ATOMIC * sizeof(int) * 2)
-#define ALIGNMENT_BYTE 256
 #define MAX_COUNT (128*1024*1024/sizeof(data_type))
-#define EU_COUNT_PER_RANK 512
+#define EU_COUNT_PER_RANK 448
 #define THREAD_COUNT_PER_EU 8
 #define HW_THREAD_COUNT (EU_COUNT_PER_RANK * THREAD_COUNT_PER_EU)
 #define KERNEL_NUM 11

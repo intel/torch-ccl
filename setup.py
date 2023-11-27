@@ -120,12 +120,44 @@ class BuildCMakeExt(BuildExtension):
                 build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
                 import intel_extension_for_pytorch
                 build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
+                if "DPCPP_GCC_INSTALL_DIR" in my_env:
+                    exist_cflags = "CFLAGS" in my_env
+                    cflags = ""
+                    if exist_cflags:
+                        cflags = my_env["CFLAGS"]
+                    my_env["CFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cflags}"
+                    exist_cxxflags = "CXXFLAGS" in my_env
+                    cxxflags = ""
+                    if exist_cxxflags:
+                        cxxflags = my_env["CXXFLAGS"]
+                    my_env["CXXFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cxxflags}"
+                    exist_ldflags = "LDFLAGS" in my_env
+                    ldflags = ""
+                    if exist_ldflags:
+                        ldflags = my_env["LDFLAGS"]
+                    my_env["LDFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} -fuse-ld=lld -lrt -lpthread {ldflags}"
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc
         build_options['CMAKE_CXX_COMPILER'] = cxx
 
         extension.generate(build_options, my_env, build_dir, install_dir)
+
+        if 'COMPUTE_BACKEND' in os.environ:
+            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
+                if "DPCPP_GCC_INSTALL_DIR" in my_env:
+                    if exist_cflags:
+                        my_env["CFLAGS"] = cflags
+                    else:
+                        del my_env["CFLAGS"]
+                    if exist_cxxflags:
+                        my_env["CXXFLAGS"] = cxxflags
+                    else:
+                        del my_env["CXXFLAGS"]
+                    if exist_ldflags:
+                        my_env["LDFLAGS"] = ldflags
+                    else:
+                        del my_env["LDFLAGS"]
 
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'oneccl_bindings_for_pytorch'] + build_args, cwd=str(build_dir))

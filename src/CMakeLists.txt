@@ -11,6 +11,8 @@ target_compile_options(oneccl_bindings_for_pytorch PUBLIC -Wall
 if(COMPUTE_BACKEND STREQUAL "dpcpp")
     add_subdirectory(./gpu)
     add_definitions (-DUSE_GPU)
+    target_compile_options(oneccl_bindings_for_pytorch PUBLIC -fsycl)
+    target_link_options(oneccl_bindings_for_pytorch PUBLIC -fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen "-device pvc -options -vc-codegen")
 endif()
 
 target_include_directories(oneccl_bindings_for_pytorch PUBLIC ./)

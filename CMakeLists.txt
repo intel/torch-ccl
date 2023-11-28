@@ -46,8 +46,13 @@ IF (USE_SYSTEM_ONECCL)
 ELSE()
     # Find OneCCL Lib
     find_package(oneCCL REQUIRED)
-    list(APPEND DEPENDS_LIB oneCCL)
+    link_directories(${MPI_LIB_DIR})
+    list(APPEND DEPENDS_LIB oneCCL mpi)
 ENDIF()
+
+if(COMPUTE_BACKEND STREQUAL "dpcpp")
+    list(APPEND DEPENDS_LIB ze_loader)
+endif()
 
 SET(LIB_NAME "oneccl_bindings_for_pytorch")
 
@@ -81,4 +86,3 @@ function (print_configuration_summary)
 endfunction()
 
 print_configuration_summary()
-

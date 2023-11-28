@@ -1,9 +1,9 @@
 find_package(IPEX REQUIRED)
 
-set(CCL_DPCPP_SRCS dpcpp_ccl.cpp)
+set(CCL_DPCPP_SRCS dpcpp_ccl.cpp ze_exception.hpp allreduce.h sycl_misc.hpp runtime.hpp cxxopts.hpp)
 
 set_source_files_properties(${CCL_DPCPP_SRCS} PROPERTIES COMPILE_DEFINITIONS "USE_DPCPP;__STRICT_ANSI__")
-set_source_files_properties(${CCL_DPCPP_SRCS} PROPERTIES COMPILE_FLAGS "-fsycl")
+set_source_files_properties(${CCL_DPCPP_SRCS} PROPERTIES COMPILE_FLAGS -fsycl)
 
 add_library(oneccl_bindings_for_pytorch_xpu SHARED ${CCL_DPCPP_SRCS})
 

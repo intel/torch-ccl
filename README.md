@@ -77,6 +77,7 @@ The following lunch options are supported in Intel® oneCCL Bindings for PyTorch
 | :--------------------------------------- | :------------ | :-------------------------------------------------------------------- |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |
+| TORCH_LLM_ALLREDUCE                      | 0             | Set 1 to enable experimental allreduce algorithm. This is an experimental feature to provide another allreduce implementation with better performance especially in LLM inference scenarios. This feature speeds up single node performance with up to 4 Intel® Data Center GPU Max 1550 cards and requires XeLink enabled for cross-cards communication.|
 
 ## Installation
 
@@ -183,7 +184,6 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```bash
 source $basekit_root/ccl/latest/env/vars.sh
 source $basekit_root/mpi/latest/env/vars.sh
-```
 
 mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 ```

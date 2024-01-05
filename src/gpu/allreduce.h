@@ -14,6 +14,10 @@
 #include <level_zero/ze_api.h>
 #include <ext/intel/esimd.hpp>
 
+#include <stdio.h>
+#include <unistd.h>
+#include <pwd.h>
+
 #include "cxxopts.hpp"
 #include "ze_exception.hpp"
 //#include "sycl_misc.hpp"
@@ -161,7 +165,10 @@ void un_allgather(exchange_contents* send_buf, exchange_contents recv_buf[], int
   const char* servername_prefix = "/tmp/open-peer-ipc-mem-server-rank_";
   const char* clientname_prefix = "/tmp/open-peer-ipc-mem-client-rank_";
   char server_name[64];
-  snprintf(server_name, sizeof(server_name), "%s%d", servername_prefix, rank);
+  /* get username to make server_name unique */
+  auto uid = getuid();
+  auto pwd = getpwuid(uid);
+  snprintf(server_name, sizeof(server_name), "%s%d_%s", servername_prefix, rank, pwd->pw_name);
   unlink(server_name);
   auto s_listen = server_listen(server_name);
 
@@ -199,10 +206,10 @@ void un_allgather(exchange_contents* send_buf, exchange_contents recv_buf[], int
       char peer_name[64];
       char client_name[64];
 
-      snprintf(client_name, sizeof(client_name), "%s%d-%d", clientname_prefix, rank, i);
+      snprintf(client_name, sizeof(client_name), "%s%d-%d_%s", clientname_prefix, rank, i, pwd->pw_name);
       unlink(client_name);
 
-      snprintf(peer_name, sizeof(peer_name), "%s%d", servername_prefix, i);
+      snprintf(peer_name, sizeof(peer_name), "%s%d_%s", servername_prefix, i, pwd->pw_name);
       fdarray[i].fd = client_connect(peer_name, client_name);
       fdarray[i].events = POLLOUT;
       fdarray[i].revents = 0;

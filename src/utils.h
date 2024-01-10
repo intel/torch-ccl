@@ -250,7 +250,8 @@ public:
 
       try {
         call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-            CCL_CHECK(flag = req.test());
+            req.wait();
+            flag = true;
         });
       } catch (...) {
         finishAsyncWorkCCLError(std::current_exception());
@@ -463,7 +464,8 @@ public:
 
       try {
         call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-            CCL_CHECK(flag = req.test());
+            req.wait();
+            flag = true;
         });
       } catch (...) {
         finishAsyncWorkCCLError(std::current_exception());
@@ -661,6 +663,9 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = make_work_ccl<WorkCCL>(inputs, outputs, fun, comms, attr, pg_ccl.timeout, pg_ccl.getRank(), op_type, prof_title);
 
+  // Set appropriate work parameters.
+  work->blockingWait_ = pg_ccl.blockingWait_;
+  work->useSameStream_ = pg_ccl.useSameStream_;
   return work;
 }
 

@@ -271,8 +271,20 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   auto cached_comms = pg_ccl.ccl_member_->get_comms(devices_key);
   // If 'use_llm_allreduce' is changed, do not use cacched comm. Because llm allreducer 
   // initializing work is necessary right after comm creating.
-  if (cached_comms && use_llm_allreduce == last_use_llm_allreduce) {
+  if (cached_comms && use_llm_allreduce == last_use_llm_allreduce && use_llm_allreduce == 1) {
     return *cached_comms;
+  } if (cached_comms && !pg_ccl.useSameStream_) {
+    return *cached_comms;
+  } else if (cached_comms && pg_ccl.useSameStream_) {
+    c10::impl::VirtualGuardImpl impl(devices[0].type());
+    c10::Stream stream = impl.getStream(devices[0]);
+    auto torch_queue = xpu::get_queue_from_stream(stream);
+    auto last_stream = cached_comms->torch_streams[0];
+    auto last_torch_queue = xpu::get_queue_from_stream(last_stream);
+
+    if (torch_queue == last_torch_queue) {
+        return *cached_comms;
+    }
   }
 
   bool batchP2P = true; // treat like collective
@@ -312,15 +324,25 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     }
 
     c10::impl::VirtualGuardImpl impl(devices[i].type());
-    // XPU doesn't support prioritized stream.
-    c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
-    torch_streams.push_back(stream);
+    if (pg_ccl.useSameStream_) {
+        c10::Stream stream = impl.getStream(devices[i]);
+        torch_streams.push_back(stream);
+        auto q = xpu::get_queue_from_stream(stream);
+        ccl_streams.push_back(ccl::create_stream(q));
 
-    auto q = xpu::get_queue_from_stream(stream);
-    ccl_streams.push_back(ccl::create_stream(q));
+        int rank = local_base_rank + i;
+        devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+    } else {
+        // XPU doesn't support prioritized stream.
+        c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
+        torch_streams.push_back(stream);
+        auto q = xpu::get_queue_from_stream(stream);
+        ccl_streams.push_back(ccl::create_stream(q));
 
-    int rank = local_base_rank + i;
-    devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+        int rank = local_base_rank + i;
+        devs_rank.emplace_back(rank, ccl::create_device(q.get_device()));
+    }
+
   }
 
   // The IPEX use default global context.
@@ -364,7 +386,7 @@ public:
                      is_allreduce(opType == c10d::OpType::ALLREDUCE) {}
 
   void run() override {
-    if (!is_allreduce || use_llm_allreduce == 0) {
+    if (!this->useSameStream_ && use_llm_allreduce == 0) {
       const auto devices = get_device_list(this->inputs);
 
       // add SYCL running dependency computation -> communication.
@@ -391,14 +413,32 @@ public:
 
   // Waiting on the work's on XPU backend
   bool wait(std::chrono::milliseconds timeout) override {
-    this->synchronizeInternal(timeout);
+    this->synchronizeInternalForXPU(timeout);
     // Check for errors and throw appropriate exception.
     this->checkAndThrowException();
     return true;
   }
 
+  void synchronizeInternalForXPU(std::chrono::milliseconds timeout) {
+      if (this->blockingWait_) {
+          this->synchronizeInternal(kNoTimeout);
+      } else if (!this->useSameStream_) {
+          // sync from ccl event to torch stream if communication stream
+          // is not as computation stream(or default stream)
+          for(int i = 0; i < this->rets.size(); i++) {
+              ccl::event& req = this->rets[i];
+              auto torch_queue = xpu::get_queue_from_stream(this->comms.torch_streams[i]);
+              torch_queue.ext_oneapi_submit_barrier({req.get_native()});
+          }
+      }
+  }
+
+  void synchronize() override {
+    this->synchronizeInternalForXPU(kNoTimeout);
+  }
+
   void finishAsyncWorkCCL() override {
-    if (!is_allreduce || use_llm_allreduce == 0) {
+    if (!this->useSameStream_ && use_llm_allreduce == 0) {
       c10::MultiStreamGuard streams_guard(this->comms.torch_streams);
     }
     // under the stream guard. Mark the Future completing.
@@ -653,7 +693,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
       RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
-      if (disable_allreduce != 0) {
+      if (disable_allreduce != 0 || world_size == 1) {
         return ret_evt;
       }
 

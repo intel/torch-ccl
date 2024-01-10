@@ -135,6 +135,7 @@ public:
         //printf("rank%d iter%d required gpu hw thread count = %d\n", rank, index_to_triple_buffer, total_threads_needed);
         int wg_size = 1;
         int size_per_buffer_kernel = size_per_buffer;
+        uint32_t wait = total_threads_needed * 15 / 2048 + 1;
         int data_size_per_buffer_kernel = data_size_per_buffer;
         int buffer_index_kernel = buffer_index; //index to the triple temp buffer
         queue.submit([&](sycl::handler& cgh) {
@@ -206,6 +207,8 @@ public:
 #endif
                         while (status0[0] != total_threads_needed)
                         {
+                            volatile int i = 0;
+                            while (i++ < wait);
                             status0 = lsc_atomic_update<atomic_op::load, int, SMALL_SIMD_ATOMIC, lsc_data_size::default_size, cache_hint::none, cache_hint::none>
                                 (local_sync_ptr, ramp, pred);
 

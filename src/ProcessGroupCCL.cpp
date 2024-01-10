@@ -512,6 +512,23 @@ void returnFutureWithOutput(
   future->markCompleted(c10::IValue(outputTensors[0]));
 }
 
+bool parseCCLEnvVarFlag(const char* envVarName, bool default_val) {
+    char* stringValue = std::getenv(envVarName);
+    int val;
+    if (stringValue != nullptr) {
+      try {
+        val = std::stoi(stringValue);
+      } catch (std::exception& e) {
+        TORCH_CHECK(false,
+            "Invalid value for environment variable: " + std::string(envVarName));
+      }
+    } else {
+      return default_val;
+    }
+
+    if (val == 1) return true; else return false;
+}
+
 ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
                                             int rank,
                                             c10d::OpType opType,
@@ -522,7 +539,8 @@ ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>>
 // correct timestamps for work that is asynchronously executed.
         : C10D_Work(rank, opType, nullptr, inputTensors),
           outputTensors_(std::move(outputTensors)),
-          future_(createFutureAsOutput(outputTensors)) {
+          future_(createFutureAsOutput(outputTensors)
+          ) {
   if (profilingTitle != nullptr) {
 //    recordAsyncWorkProfilingInfo(profilingTitle, inputTensors);
     // TODO: for cpu async profiling repot.
@@ -594,6 +612,8 @@ ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int ran
 #endif
       ccl_member_(std::make_unique<oneccl_bindings_for_pytorch::CCLCommCollector>())
 {
+  useSameStream_ = parseCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
+  blockingWait_ = parseCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);
 #ifdef NDEBUG
     TORCH_CHECK(!oneccl_bindings_for_pytorch_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
 #else

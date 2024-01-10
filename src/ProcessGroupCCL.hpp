@@ -90,6 +90,15 @@ using C10D_Work = c10d::ProcessGroup::Work;
 // All collective functions provided by this class are scheduled
 // for asynchronous execution by CCL.
 constexpr const char* CCL_BACKEND_NAME = "ccl";
+
+// Environment variable which controls whether wait() and synchronize() are blocking or
+// non-blocking.
+constexpr const char* CCL_BLOCKING_WAIT = "CCL_BLOCKING_WAIT";
+
+// Environment variable which controls whether or not use default stream as
+// communication stream for collectives
+constexpr const char* CCL_SAME_STREAM = "CCL_SAME_STREAM";
+
 #if TORCH_VERSION_MAJOR > 1
 using Baseclass = Backend;
 #else
@@ -118,6 +127,10 @@ public:
 
   public:
     std::string debugName;
+    // Clone of blockingWait_ from ProcessGroupCCL.
+    bool blockingWait_ = true;
+    // Clone of useSameStream_ from ProcessGroupCCL.
+    bool useSameStream_ = false;
 
   protected:
     friend class ProcessGroupCCL;
@@ -243,6 +256,14 @@ public:
   std::unique_ptr<oneccl_bindings_for_pytorch::CCLCommCollector> ccl_member_;
 
   static std::mutex globalMutex;
+
+  // Whether or not wait() and synchronize() are blocking operations that wait
+  // for the operation to complete.
+  bool blockingWait_ = true;
+
+  // Environment variable which controls whether to keep same stream
+  // for collectives and compute
+  bool useSameStream_ = false;
 };
 
 } // namespace c10d

@@ -660,10 +660,15 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::allreduce(
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::allreduce_coalesced(
-    std::vector<at::Tensor>& /* unused */,
-    const AllreduceCoalescedOptions& /* unused */)
+    std::vector<at::Tensor>& tensors,
+    const AllreduceCoalescedOptions& opts)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support allreduce_coalesced");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, tensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::allreduce_coalesced", tensor_param);
+
+  auto work = DispatchStub::allreduce_coalesced(tensors, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::reduce(

@@ -118,6 +118,27 @@ protected:
     return work;
   }
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                            const AllreduceOptions& opts,
+                                                            ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::allreduce_coalesced: ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " ";
+    format_tensors_size(os, tensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->allreduce_coalesced_(tensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override {
@@ -440,6 +461,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce(std::v
   checkSameType(tensors[0], tensors);
   c10::DeviceType dev_type = tensors[0].device().type();
   return get_ccl_stub(dev_type)->allreduce_(tensors, opts, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce_coalesced(std::vector<at::Tensor>& tensors,
+                                                                       const AllreduceOptions& opts,
+                                                                       ProcessGroupCCL& pg_ccl) {
+  checkSameType(tensors[0], tensors);
+  c10::DeviceType dev_type = tensors[0].device().type();
+  return get_ccl_stub(dev_type)->allreduce_coalesced_(tensors, opts, pg_ccl);
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vector<at::Tensor>& tensors,

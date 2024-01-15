@@ -129,6 +129,10 @@ protected:
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                                    const AllreduceOptions& opts,
+                                                                    ProcessGroupCCL& pg) override;
+
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
@@ -311,6 +315,38 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_(std::ve
   enqueue(work);
   return work;
 }
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                                const AllreduceOptions& opts,
+                                                                ProcessGroupCCL& pg) {
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, CPUWorkCCL>(
+          pg,
+          tensors,
+          tensors,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allreduce_attr attr,
+              ccl::communicator& comm){
+              ccl::event ret_evt;
+              call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+                  CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
+                                                     output.data_ptr(),
+                                                     (size_t) input.numel(),
+                                                     cclDatatypes.at(input.scalar_type()),
+                                                     cclOps.at(opts.reduceOp),
+                                                     comm,
+                                                     attr););
+              });
+              return ret_evt;
+          },
+          c10d::OpType::ALLREDUCE,
+          "oneccl_bindings_for_pytorch::cpu_work::allreduce_coalesced_");
+  work->debugName = std::string("cpu::allreduce_coalesced");
+  enqueue(work);
+  return work;
+}
+
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vector<at::Tensor>& tensors,
                                                                    const ReduceOptions& opts,

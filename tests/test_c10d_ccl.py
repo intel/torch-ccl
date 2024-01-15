@@ -196,7 +196,29 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     @skip_if_not_multixpu
     def test_allreduce_basics_multi_xpu(self):
         self._test_allreduce_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+    
+    def _test_allreduce_coalesced_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+        tensors = [fn(torch.full((5 + i,), self.rank + 1 + i, dtype=torch.float)) for i in range(5)]
+        opts = c10d.AllreduceCoalescedOptions()
+        opts.reduceOp = c10d.ReduceOp.SUM
+                
+        pg.allreduce_coalesced(tensors, opts)
+        for i, t in enumerate(tensors):
+            self.assertEqual(t, torch.full_like(t, self.world_size * (i + (self.world_size + 1.) / 2.)))
+    
+    def test_allreduce_coalesced_basics(self):
+        self._test_allreduce_coalesced_basics(lambda t: t.clone())
+    
+    @skip_if_no_xpu   
+    def test_allreduce_coalesced_basics_xpu(self):
+        self._test_allreduce_coalesced_basics(lambda t: t.clone().xpu())
 
+    @skip_if_not_multixpu  
+    def test_allreduce_coalesced_basics_multi_xpu(self):
+        self._test_allreduce_coalesced_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+    
     def _test_reduce_basics(self, fn):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)

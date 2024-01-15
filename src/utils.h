@@ -332,8 +332,13 @@ protected:
   typename std::enable_if<!is_vector<T>::value, void>::type run_wrap_(std::index_sequence<INDEX...>) {
     if (rets.empty()) {
       auto& outputs = outputTensors_[0];
+      // Since torch-ccl only supports one device per process now, the size of comms.comms must be 0.
+      if (comms.comms.size() !=1) {
+        throw std::runtime_error("Torch CCL only support one device per process now");
+      }
+
       for (size_t i = 0; i < inputs.size(); i++) {
-        CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i + INDEX]...)));
+        CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[0], comms.streams[0 + INDEX]...)));
       }
     }
     else {

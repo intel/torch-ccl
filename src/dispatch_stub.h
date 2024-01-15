@@ -51,6 +51,10 @@ public:
                                                                   const AllreduceOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl);
 
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_coalesced(std::vector<at::Tensor>& tensors,
+                                                                  const AllreduceOptions& opts,
+                                                                  ProcessGroupCCL& pg_ccl);
+
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce(std::vector<at::Tensor>& tensors,
                                                                const ReduceOptions& opts,
                                                                ProcessGroupCCL& pg_ccl);
@@ -205,6 +209,13 @@ public:
                                                                     const AllreduceOptions& opts,
                                                                     ProcessGroupCCL& pg_ccl) {
     fail(tensors[0].device().type(), "allreduce");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                                    const AllreduceOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) {
+    fail(tensors[0].device().type(), "allreduce_coalesced");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
 

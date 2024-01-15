@@ -401,7 +401,9 @@ public:
         // operations where `inputs' and `outputs' are not the same.
         //
         // See [Sync Streams].
-        record_tensor(this->inputs[i], this->comms.torch_streams[i]);
+        // Now torch-ccl only supports one device per process, so there is only one 
+        // torch stream in comms.torch_streams.
+        record_tensor(this->inputs[i], this->comms.torch_streams[0]);
       }
     }
 
@@ -524,6 +526,10 @@ protected:
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                                    const AllreduceOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) override;
+
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_(std::vector<at::Tensor>& tensors,
                                                          const ReduceOptions& opts,
@@ -591,6 +597,10 @@ private:
   std::deque<c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>> queue_;
   std::condition_variable queueProduceCV_;
   std::condition_variable queueConsumeCV_;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_impl(std::vector<at::Tensor>& tensors,
+                                                            const AllreduceOptions& opts,
+                                                            ProcessGroupCCL& pg_ccl);
 };
 
 struct RegisterXPUMethods {
@@ -671,7 +681,7 @@ void XPUCCLStubs::runLoop() {
   }
 }
 
-c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vector<at::Tensor>& tensors,
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_impl(std::vector<at::Tensor>& tensors,
                                                                        const AllreduceOptions& opts,
                                                                        ProcessGroupCCL& pg_ccl) {
   checkGPUTensor(tensors);
@@ -690,7 +700,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
         ccl::allreduce_attr attr,
         ccl::communicator& comm,
         ccl::stream& stream) {
-      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({input}));
 
       ccl::event ret_evt;
       if (disable_allreduce != 0 || world_size == 1) {
@@ -738,6 +747,25 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::v
   execute(work);
 
   return work;
+}
+
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_(std::vector<at::Tensor>& tensors,
+                                                                       const AllreduceOptions& opts,
+                                                                       ProcessGroupCCL& pg_ccl) {
+    RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce", std::vector<c10::IValue>({tensors[0]}));
+    return allreduce_impl(tensors, opts, pg_ccl);
+}
+
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_coalesced_(std::vector<at::Tensor>& tensors,
+                                                                       const AllreduceOptions& opts,
+                                                                      ProcessGroupCCL& pg_ccl) {
+    std::vector<c10::IValue> params(tensors.size());
+    std::transform(tensors.begin(), tensors.end(), params.begin(), 
+        [](const at::Tensor& t) {return static_cast<c10::IValue>(t);});
+    RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allreduce_coalesced", params);
+    return allreduce_impl(tensors, opts, pg_ccl);
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vector<at::Tensor>& tensors,

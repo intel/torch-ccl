@@ -70,7 +70,10 @@ std::vector<at::Device> get_device_list(const std::vector<at::Tensor>& tensors) 
   std::vector<at::Device> res;
   res.reserve(tensors.size());
   for (auto& tensor : tensors) {
-    res.push_back(tensor.device());
+    // Tensors must all be on the same device, or all on distinct devices.
+    if (res.size() == 0 || tensor.device() != res[0]) {
+      res.push_back(tensor.device());
+    }
   }
   return res;
 }

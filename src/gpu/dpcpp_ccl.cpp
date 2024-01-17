@@ -268,23 +268,18 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     throw std::runtime_error("Torch CCL only support one device per process now");
   }
 
-  auto cached_comms = pg_ccl.ccl_member_->get_comms(devices_key);
-  // If 'use_llm_allreduce' is changed, do not use cacched comm. Because llm allreducer 
-  // initializing work is necessary right after comm creating.
-  if (cached_comms && use_llm_allreduce == last_use_llm_allreduce && use_llm_allreduce == 1) {
-    return *cached_comms;
-  } if (cached_comms && !pg_ccl.useSameStream_) {
-    return *cached_comms;
-  } else if (cached_comms && pg_ccl.useSameStream_) {
-    c10::impl::VirtualGuardImpl impl(devices[0].type());
-    c10::Stream stream = impl.getStream(devices[0]);
-    auto torch_queue = xpu::get_queue_from_stream(stream);
-    auto last_stream = cached_comms->torch_streams[0];
-    auto last_torch_queue = xpu::get_queue_from_stream(last_stream);
-
-    if (torch_queue == last_torch_queue) {
-        return *cached_comms;
-    }
+  if (pg_ccl.useSameStream_) {
+      c10::impl::VirtualGuardImpl impl(devices[0].type());
+      c10::Stream current_stream = impl.getStream(devices[0]);
+      auto cached_comms = pg_ccl.ccl_member_->get_comms(devices_key + "_" + std::to_string(current_stream.id()));
+      if (cached_comms) {
+          return *cached_comms;
+      }
+  } else {
+     auto cached_comms = pg_ccl.ccl_member_->get_comms(devices_key); // stream is not in cache key
+     if (cached_comms && use_llm_allreduce == last_use_llm_allreduce) {
+         return *cached_comms;
+     }
   }
 
   bool batchP2P = true; // treat like collective
@@ -363,7 +358,14 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   
   // Store the comms to cache
   std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
-  pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);
+
+  if (pg_ccl.useSameStream_) {
+      auto torch_streams = dpcpp_comms_ptr->torch_streams;
+      // Add stream id to cache. Then if new stream comes, new communicator will be created.
+      pg_ccl.ccl_member_->add_comms(devices_key + "_" + std::to_string(torch_streams[0].id()), dpcpp_comms_ptr);
+  } else {
+      pg_ccl.ccl_member_->add_comms(devices_key, dpcpp_comms_ptr);
+  }
 
   return *dpcpp_comms_ptr.get();
 }

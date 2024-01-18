@@ -597,6 +597,10 @@ public:
         using namespace __ESIMD_NS;
         using namespace __ESIMD_ENS;
 
+        if (world == 1) {
+            return;
+        }
+
         //gpu_timer<KERNEL_NUM> gtimer;
         //cpu_timer<MAX_REPETITION + 1> ctimer;
         //float total_kernel_time ;
@@ -686,9 +690,6 @@ public:
 
                                 switch (temp_world)
                                 {
-                                case 1:
-                                    load_input_to_temp_buffer<1, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
-                                    break;
                                 case 2:
                                     load_input_to_temp_buffer<2, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
                                     break;
@@ -792,9 +793,6 @@ public:
 
                                 switch (temp_world)
                                 {
-                                case 1:
-                                    local_sum_and_distribute_to_remote_ranks<1, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
-                                    break;
                                 case 2:
                                     local_sum_and_distribute_to_remote_ranks<2, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
                                     break;
@@ -902,9 +900,6 @@ public:
 
                                 switch (temp_world)
                                 {
-                                case 1:
-                                    all_sum<1, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
-                                    break;
                                 case 2:
                                     all_sum<2, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
                                     break;
@@ -1010,9 +1005,6 @@ public:
 
                                 switch (temp_world)
                                 {
-                                case 1:
-                                    gather_from_remote_and_dist_to_rank_pair<1, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
-                                    break;
                                 case 2:
                                     gather_from_remote_and_dist_to_rank_pair<2, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
                                     break;
@@ -1118,9 +1110,6 @@ public:
 
                                 switch (temp_world)
                                 {
-                                case 1:
-                                    write_output<1, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
-                                    break;
                                 case 2:
                                     write_output<2, data_type>(index, inout_buffer, size, threads_already_processed, (void **)temp_buffer, temp_rank, outer_iter, size_per_buffer_kernel, buffer_index_kernel);
                                     break;

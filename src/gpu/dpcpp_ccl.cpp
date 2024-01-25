@@ -385,9 +385,14 @@ public:
              const c10::optional<std::vector<at::Tensor>>& inputTensors) :
              CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors), 
-                     is_allreduce(opType == c10d::OpType::ALLREDUCE) {}
+                     is_coalescing_end(inputs.empty()) {}
 
   void run() override {
+    // Return immediately if current op is coalescing_end since inputs and outputs are empty. 
+    if (is_coalescing_end) {
+      return;
+    }
+
     if (!this->useSameStream_ && use_llm_allreduce == 0) {
       const auto devices = get_device_list(this->inputs);
 
@@ -449,7 +454,7 @@ public:
     this->AsyncWorkCCL::finishAsyncWorkCCL();
   }
 private:
-    bool is_allreduce;
+    bool is_coalescing_end;
 };
 
 template <typename RunF, typename CommType, typename InputType, typename OutputType, typename attr_t>
@@ -542,6 +547,11 @@ protected:
                                                                           const ReduceScatterOptions& opts,
                                                                           ProcessGroupCCL& pg_ccl) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>  reduce_scatter_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                        std::vector<at::Tensor>& inputTensors,
+                                                                        const ReduceScatterOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
                                                             const BroadcastOptions& opts,
                                                             ProcessGroupCCL& pg_ccl) override;
@@ -555,6 +565,11 @@ protected:
                                                                      at::Tensor& inputTensor,
                                                                      const AllgatherOptions& opts,
                                                                      ProcessGroupCCL& pg_ccl) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_into_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                        std::vector<at::Tensor>& inputTensors,
+                                                                        const AllgatherOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl) override;
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                          std::vector<at::Tensor>& inputTensors,
@@ -587,6 +602,8 @@ protected:
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier_(const BarrierOptions& opts,
                                                                 ProcessGroupCCL& pg) override;
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> end_coalescing_(ProcessGroupCCL& pg_ccl) override;
 
   void destroy();
   void reset() override {}
@@ -859,6 +876,42 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_b
   return work;
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_scatter_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                    std::vector<at::Tensor>& inputTensors,
+                                                                    const ReduceScatterOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) {
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+          pg_ccl,
+          inputTensors,
+          outputTensors,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allgatherv_attr attr,
+              ccl::communicator& comm,
+              ccl::stream& stream) {
+            RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::reduce_scatter_tensor_coalesced_", std::vector<c10::IValue>({input}));
+
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+                                                      output.data_ptr(),
+                                                      (size_t) output.numel(),
+                                                      cclDatatypes.at(input.scalar_type()),
+                                                      cclOps.at(opts.reduceOp),
+                                                      comm,
+                                                      stream));
+            });
+            return ret_evt;
+          },
+          c10d::OpType::COALESCED);
+
+  work->debugName = std::string("xpu::reduce_scatter_tensor_coalesced_");
+  execute(work);
+
+  return work;
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::vector<at::Tensor>& tensors,
                                                                        const BroadcastOptions &opts,
                                                                        ProcessGroupCCL& pg_ccl) {
@@ -991,6 +1044,49 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_allgather_base_(
           c10d::OpType::_ALLGATHER_BASE);
 
   work->debugName = std::string("xpu::_allgather_base_");
+  execute(work);
+
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allgather_into_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                    std::vector<at::Tensor>& inputTensors,
+                                                                    const AllgatherOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) {
+  const int world_size = pg_ccl.getSize();
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+          pg_ccl,
+          inputTensors,
+          outputTensors,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allgatherv_attr attr,
+              ccl::communicator& comm,
+              ccl::stream& stream) {
+            if (input.numel() * world_size != output.numel()) {
+                TORCH_CHECK(false, "output tensor size must be equal to world_size times input tensor size");
+            }
+
+            RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::allgather_into_tensor_coalesced_", std::vector<c10::IValue>({input}));
+
+            std::vector<size_t> recvCounts(world_size, input.numel());
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                         (size_t) input.numel(),
+                                         output.data_ptr(),
+                                         recvCounts,
+                                         cclDatatypes.at(input.scalar_type()),
+                                         comm,
+                                         stream));
+            });
+            return ret_evt;
+          },
+          c10d::OpType::COALESCED);
+
+  work->debugName = std::string("xpu::allgather_into_tensor_coalesced_");
   execute(work);
 
   return work;
@@ -1384,6 +1480,31 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::barrier_(const Ba
      }
   }
   return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::end_coalescing_(ProcessGroupCCL& pg_ccl) {
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  // Create empty tensors.
+  std::vector<at::Tensor> tensors;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+    pg_ccl,
+    tensors,
+    tensors,
+    [=](at::Tensor input,
+        at::Tensor output,
+        ccl::allreduce_attr attr, // This is a silly attr, which will not be used. It could be any attr type of ccl.
+        ccl::communicator& comm,
+        ccl::stream& stream) {
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::coalescing", std::vector<c10::IValue>{});
+      ccl::event ret_evt;
+      return ret_evt;
+    },
+    c10d::OpType::COALESCED);
+
+  work->debugName = std::string("xpu::end_coalescing");
+  execute(work);
+
+  return work;    
 }
 
 RegisterXPUMethods xpu_register;

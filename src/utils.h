@@ -661,9 +661,21 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   using attr_t = typename traits::template arg<2>::type;
   attr_t attr = ccl::create_operation_attr<attr_t>();
 
-  const auto devices = get_device_list(inputs);
+  std::vector<at::Device> devices;
+  if (inputs.empty()) {
+    // Coalesced op has empty tensors for both input and output. 
+    // Use 'coalescedDevices_' as devices, which should have same set of devices across collectives
+    devices = {pg_ccl.coalescedDevices_[0]};
+  } else {
+    devices = get_device_list(inputs);
+  }
+
   const auto key = get_key_from_devs(devices);
   auto& comms = get_ccl_fn(pg_ccl, key, devices, c10d::OpType::UNKNOWN, 0, false);
+
+  if (pg_ccl.is_coalescing_) {
+    pg_ccl.coalescedDevices_.push_back(devices[0]);
+  }
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = make_work_ccl<WorkCCL>(inputs, outputs, fun, comms, attr, pg_ccl.timeout, pg_ccl.getRank(), op_type, prof_title);

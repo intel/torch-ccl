@@ -185,6 +185,31 @@ protected:
     return work;
   }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_tensor_coalesced_(
+                                                    std::vector<at::Tensor>& outputTensors,
+                                                    std::vector<at::Tensor>& inputTensors,
+                                                    const ReduceScatterOptions& opts,
+                                                    ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::reduce_scatter_tensor_coalesced: ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " input ";
+    format_tensors_size(os, inputTensors);
+    os << " output ";
+    format_tensors_size(os, outputTensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->reduce_scatter_tensor_coalesced_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                             std::vector<at::Tensor>& inputTensors,
                                                             const AllgatherOptions& opts,
@@ -252,6 +277,31 @@ protected:
     auto currentTimepoint = std::chrono::steady_clock::now();
     auto timeElapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_into_tensor_coalesced_(
+                                                        std::vector<at::Tensor>& outputTensors,
+                                                        std::vector<at::Tensor>& inputTensors,
+                                                        const AllgatherOptions& opts,
+                                                        ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::allgather_into_tensor_coalesced: ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " input ";
+    format_tensors_size(os, inputTensors);
+    os << " output ";
+    format_tensors_size(os, outputTensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->allgather_into_tensor_coalesced_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(
         currentTimepoint - workStartTime_);
     format_time_elapsed(os, timeElapsed);
     std::cout << os.str() << std::endl;
@@ -418,6 +468,26 @@ protected:
     std::cout << os.str() << std::endl;
     return work;
   }
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> end_coalescing_(ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::end_coalescing: ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->end_coalescing_(pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+
+    return get_ccl_stub(c10::DeviceType::XPU)->end_coalescing_(pg_ccl);
+  }
+
 private:
   c10::DeviceType dev_type;
   DispatchStub* hdlr;
@@ -508,6 +578,17 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_allgather_base(
   return get_ccl_stub(dev_type)->_allgather_base_(outputTensor, inputTensor, opts, pg_ccl);
 }
 
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allgather_into_tensor_coalesced(
+                                                            std::vector<at::Tensor>& outputTensors,
+                                                            std::vector<at::Tensor>& inputTensors,
+                                                            const AllgatherOptions& opts,
+                                                            ProcessGroupCCL& pg_ccl) {
+  checkSameType(inputTensors[0], inputTensors);
+  checkSameType(outputTensors[0], outputTensors);
+  c10::DeviceType dev_type = inputTensors[0].device().type();
+  return get_ccl_stub(dev_type)->allgather_into_tensor_coalesced_(outputTensors, inputTensors, opts, pg_ccl);
+}
+
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::gather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                              std::vector<at::Tensor>& inputTensors,
                                                              const GatherOptions& opts,
@@ -534,6 +615,17 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_reduce_scatter_
                                                                 ProcessGroupCCL& pg_ccl) {
   c10::DeviceType dev_type = inputTensor.device().type();
   return get_ccl_stub(dev_type)->_reduce_scatter_base_(outputTensor, inputTensor, opts, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce_scatter_tensor_coalesced(
+                                                            std::vector<at::Tensor>& outputTensors,
+                                                            std::vector<at::Tensor>& inputTensors,
+                                                            const ReduceScatterOptions& opts,
+                                                            ProcessGroupCCL& pg_ccl) {
+  checkSameType(inputTensors[0], inputTensors);
+  checkSameType(outputTensors[0], outputTensors);
+  c10::DeviceType dev_type = inputTensors[0].device().type();
+  return get_ccl_stub(dev_type)->reduce_scatter_tensor_coalesced_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::alltoall_base(at::Tensor& outputTensor,
@@ -583,6 +675,10 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::barrier(const Ba
   c10::DeviceType dev_type = c10::DeviceType::CPU;
 #endif
   return get_ccl_stub(dev_type)->barrier_(opts, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::end_coalescing(ProcessGroupCCL& pg_ccl) {
+    return get_ccl_stub(c10::DeviceType::XPU)->end_coalescing_(pg_ccl);
 }
 
 void DispatchStub::reset_all() {

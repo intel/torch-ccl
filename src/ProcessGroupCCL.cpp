@@ -231,6 +231,21 @@ TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("_allgather_base_", _allgather_base_xpu_);
 }
 
+c10::intrusive_ptr<c10d::Work> allgather_into_tensor_coalesced_xpu_(
+    at::TensorList outputs,
+    at::TensorList inputs,  
+    const c10::intrusive_ptr<ProcessGroup>& process_group) {
+
+  auto output_vec = outputs.vec(); 
+  auto input_vec = inputs.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+            ->allgather_into_tensor_coalesced(output_vec, input_vec);
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("allgather_into_tensor_coalesced_", allgather_into_tensor_coalesced_xpu_);
+}
+
 c10::intrusive_ptr<C10D_Work> allgather_coalesced_xpu_(
     const std::vector<std::vector<at::Tensor>>& output_lists,
     const at::TensorList& input_list,
@@ -372,6 +387,26 @@ std::tuple<at::Tensor, c10::intrusive_ptr<C10D_Work>> _reduce_scatter_base_xpu_(
 
 TORCH_LIBRARY_IMPL(c10d, XPU, m) {
   m.impl("_reduce_scatter_base_", _reduce_scatter_base_xpu_);
+}
+
+c10::intrusive_ptr<C10D_Work> reduce_scatter_tensor_coalesced_xpu_(
+    at::TensorList outputs,
+    at::TensorList inputs,  
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    int64_t timeout) {
+  auto output_vec = outputs.vec();
+  auto input_vec = inputs.vec();
+  return process_group->getBackend(c10::DeviceType::XPU)
+    ->reduce_scatter_tensor_coalesced(
+      output_vec,
+      input_vec,
+      ReduceScatterOptions{
+        *reduce_op.get(), std::chrono::milliseconds(timeout)});
+}
+
+TORCH_LIBRARY_IMPL(c10d, XPU, m) {
+  m.impl("reduce_scatter_tensor_coalesced_", reduce_scatter_tensor_coalesced_xpu_);
 }
 
 c10::intrusive_ptr<C10D_Work> alltoall_base_xpu_(
@@ -633,6 +668,20 @@ ProcessGroupCCL::~ProcessGroupCCL()
 {
 }
 
+void ProcessGroupCCL::startCoalescing() {
+    // TODO: GroupStart
+    // Currently oneccl dost not support group execution like NCCL, just mark here.
+    coalescedDevices_.clear();
+    is_coalescing_ = true;
+}
+
+c10::intrusive_ptr<Work> ProcessGroupCCL::endCoalescing() {
+    // TODO: GroupEnd
+    is_coalescing_ = false;
+    auto work = DispatchStub::end_coalescing(*this);
+    return work;
+}
+
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::broadcast(
     std::vector<at::Tensor>& tensors,
     const BroadcastOptions& opts)
@@ -720,6 +769,20 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::allgather_coalesced(
   TORCH_CHECK(false, "ProcessGroupCCL does not support allgather_coalesced");
 }
 
+c10::intrusive_ptr<Work> ProcessGroupCCL::allgather_into_tensor_coalesced(
+    std::vector<at::Tensor>& outputTensors,
+    std::vector<at::Tensor>& inputTensors,
+    const AllgatherOptions& opts)
+{
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::allgather_into_tensor_coalesced", tensor_param);
+
+  auto work = DispatchStub::allgather_into_tensor_coalesced(outputTensors, inputTensors, opts, *this);
+  return work;
+}
+
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::gather(
     std::vector<std::vector<at::Tensor>>& outputTensors,
     std::vector<at::Tensor>& inputTensors,
@@ -767,6 +830,20 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::_reduce_scatter_base(
      RECORD_FUNCTION("oneccl_bindings_for_pytorch::_reduce_scatter_base", tensor_param);
      auto work = DispatchStub::_reduce_scatter_base(outputTensor, inputTensor, opts, *this);
      return work;
+}
+
+c10::intrusive_ptr<Work> ProcessGroupCCL::reduce_scatter_tensor_coalesced(
+    std::vector<at::Tensor>& outputTensors,
+    std::vector<at::Tensor>& inputTensors,
+    const ReduceScatterOptions& opts)
+{
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::reduce_scatter_tensor_coalesced", tensor_param);
+  
+  auto work = DispatchStub::reduce_scatter_tensor_coalesced(outputTensors, inputTensors, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::alltoall_base(

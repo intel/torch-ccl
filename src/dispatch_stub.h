@@ -74,6 +74,12 @@ public:
                                                                 const AllgatherOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl);
 
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_into_tensor_coalesced(
+                                                                std::vector<at::Tensor>& outputTensors,
+                                                                std::vector<at::Tensor>& inputTensors,
+                                                                const AllgatherOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl);
+
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                std::vector<at::Tensor>& inputTensors,
                                                                const GatherOptions& opts,
@@ -88,6 +94,12 @@ public:
                                                                   at::Tensor& inputTensor,
                                                                   const ReduceScatterOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl);
+
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_tensor_coalesced(
+                                                                std::vector<at::Tensor>& outputTensors,
+                                                                std::vector<at::Tensor>& inputTensors,
+                                                                const ReduceScatterOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl);
 
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_base(at::Tensor& outputTensor,
                                                                       at::Tensor& inputTensor,
@@ -113,6 +125,8 @@ public:
 
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> barrier(const BarrierOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl);
+
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> end_coalescing(ProcessGroupCCL& pg_ccl);                                                            
 
   static void reset_all();
 
@@ -149,6 +163,15 @@ public:
       return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
 
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allgather_into_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                        std::vector<at::Tensor>& inputTensors,
+                                                                        const AllgatherOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl)  {
+
+      fail(inputTensors[0].device().type(), "allgather_into_tensor_coalesced_");
+      return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
   virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                  std::vector<at::Tensor>& inputTensors,
                                                                  const GatherOptions& opts,
@@ -172,6 +195,15 @@ public:
 
     fail(inputTensor.device().type(), "_reduce_scatter_base");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
+                                                                        std::vector<at::Tensor>& inputTensors,
+                                                                        const ReduceScatterOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl)  {
+
+      fail(inputTensors[0].device().type(), "reduce_scatter_tensor_coalesced_");
+      return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
 
   virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> broadcast_(std::vector<at::Tensor>& tensors,
@@ -234,6 +266,12 @@ public:
     fail(tensors[0].device().type(),"recv");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();                                                            
   }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> end_coalescing_(ProcessGroupCCL& pg_ccl) {
+    TORCH_CHECK(false, "oneccl_bindings_for_pytorch: end_coalescing isn't implementd on backend [", c10::DeviceType::CPU, "].");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
 private:
   static void fail(c10::DeviceType dev_type, const std::string method) {
     TORCH_CHECK(false, "oneccl_bindings_for_pytorch: ", method, " isn't implementd on backend [", dev_type, "].");

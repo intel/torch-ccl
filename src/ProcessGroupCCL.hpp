@@ -151,6 +151,10 @@ public:
   }
 #endif
 
+  void startCoalescing() override;
+
+  c10::intrusive_ptr<Work> endCoalescing() override;
+
   c10::intrusive_ptr<C10D_Work> broadcast(
       std::vector<at::Tensor>& data,
       const BroadcastOptions& opts = BroadcastOptions()) override;
@@ -183,6 +187,11 @@ public:
       std::vector<at::Tensor>& inputTensors,
       const AllgatherOptions& opts = AllgatherOptions()) override;
 
+  c10::intrusive_ptr<Work> allgather_into_tensor_coalesced(
+      std::vector<at::Tensor>& outputTensors,
+      std::vector<at::Tensor>& inputTensors,
+      const AllgatherOptions& opts = AllgatherOptions()) override;
+
   c10::intrusive_ptr<C10D_Work> gather(
       std::vector<std::vector<at::Tensor>>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
@@ -202,6 +211,11 @@ public:
           at::Tensor& outputBuffer,
           at::Tensor& inputBuffer,
           const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
+
+  c10::intrusive_ptr<Work> reduce_scatter_tensor_coalesced(
+      std::vector<at::Tensor>& outputs,
+      std::vector<at::Tensor>& inputs,
+      const ReduceScatterOptions& opts = ReduceScatterOptions()) override;
 
   c10::intrusive_ptr<C10D_Work> alltoall_base(
       at::Tensor& outputTensor,
@@ -264,6 +278,12 @@ public:
   // Environment variable which controls whether to keep same stream
   // for collectives and compute
   bool useSameStream_ = false;
+
+  // Flag to denote if a coalescing groupStart/groupEnd block is active
+  bool is_coalescing_ = false;
+
+  // Stores device indexes for all collectives run inside a coalescing block
+  std::vector<at::Device> coalescedDevices_;
 };
 
 } // namespace c10d

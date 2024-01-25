@@ -544,6 +544,75 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     @skip_if_not_multixpu
     def test_reduce_scatter_base_multi_xpu(self):
         self._test_reduce_scatter_base_ops(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+    
+    @skip_if_no_xpu
+    def test_coalescing_manager(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        c10d.init_process_group(
+            "ccl",
+            world_size=self.world_size,
+            rank=self.rank,
+            store=store,
+        )
+        device = torch.device("xpu:{}".format(self.rank))
+        num_colls = 2
+        size_per_coll = 8
+        small_tensors = [
+            torch.ones(size_per_coll, device=device) for _ in range(num_colls)
+        ]
+        
+        with c10d._coalescing_manager(device=device):
+            for i in range(num_colls):
+                c10d.all_reduce(small_tensors[i])
+        
+        big_tensor = torch.ones(num_colls * size_per_coll, device=device)
+        c10d.all_reduce(big_tensor)
+        
+        for i in range(num_colls):
+            self.assertEqual(
+                small_tensors[i], 
+                big_tensor[i * size_per_coll : (i + 1) * size_per_coll]
+            )
+            
+    @skip_if_no_xpu
+    def test_allgather_into_tensor_coalesced(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        c10d.init_process_group(
+            "ccl",
+            world_size=self.world_size,
+            rank=self.rank,
+            store=store,
+        )
+        device = torch.device("xpu:{}".format(self.rank))
+        
+        input_tensors = torch.ones(2, 2, device=device)
+        output_tensors = [torch.zeros(2, 2, device=device) for _ in range(self.world_size)]
+        
+        with c10d._coalescing_manager(device=device):
+            for i in range(self.world_size):
+                c10d.all_gather_into_tensor(output_tensors[i], input_tensors[i])
+        
+        self.assertEqual(output_tensors[self.rank], input_tensors)
 
+    @skip_if_no_xpu
+    def test_reduce_scatter_tensor_coalesced(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        c10d.init_process_group(
+            "ccl",
+            world_size=self.world_size,
+            rank=self.rank,
+            store=store,
+        )
+        device = torch.device("xpu:{}".format(self.rank))
+        
+        input_tensors = [torch.ones(2, 2, device=device) for _ in range(self.world_size)]
+        output_tensors = torch.zeros(2, 2, device=device)
+        
+        with c10d._coalescing_manager(device=device):
+            for i in range(self.world_size):
+                c10d.reduce_scatter_tensor(output_tensors[i], input_tensors[i])
+        
+        self.assertEqual(output_tensors, input_tensors[self.rank] * self.world_size)
+        
 if __name__ == '__main__':
     run_tests()

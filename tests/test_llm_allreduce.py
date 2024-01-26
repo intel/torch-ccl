@@ -36,7 +36,7 @@ llm_shapes = [
     (1, 4, 14336), (1, 1028, 14336), (1, 33, 14336), (1, 1, 14336)
 ]
 
-os.environ['TORCH_LLM_ALLREDUCE'] = '1'
+os.environ['TORCH_LLM_ALLREDUCE_DEBUG'] = '1'
 for shape in llm_shapes:
     data = torch.rand(shape, dtype=torch.float16).to(device)
     # Expected value is identical to input for average allreduce.

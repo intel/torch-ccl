@@ -547,7 +547,7 @@ void returnFutureWithOutput(
   future->markCompleted(c10::IValue(outputTensors[0]));
 }
 
-bool parseCCLEnvVarFlag(const char* envVarName, bool default_val) {
+bool parseTorchCCLEnvVarFlag(const char* envVarName, bool default_val) {
     char* stringValue = std::getenv(envVarName);
     int val;
     if (stringValue != nullptr) {
@@ -562,6 +562,25 @@ bool parseCCLEnvVarFlag(const char* envVarName, bool default_val) {
     }
 
     if (val == 1) return true; else return false;
+}
+
+int getOneCCLEnvVar(std::string envVarName) {
+    char* stringValue = std::getenv(envVarName.c_str());
+    if (stringValue != nullptr) {
+      try {
+        int val = std::stoi(stringValue);
+        return val;
+      } catch (std::exception& e) {
+        TORCH_CHECK(false,
+            "Invalid value for environment variable: " + std::string(envVarName));
+      }
+    } else {
+       return -1;
+    }
+}
+
+void setOneCCLEnvVar(std::string envVarName, int val) {
+    setenv(envVarName.c_str(), std::to_string(val).c_str(), val);
 }
 
 ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
@@ -647,8 +666,16 @@ ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int ran
 #endif
       ccl_member_(std::make_unique<oneccl_bindings_for_pytorch::CCLCommCollector>())
 {
-  useSameStream_ = parseCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
-  blockingWait_ = parseCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);
+  torch_llm_allreduce_ = parseTorchCCLEnvVarFlag(TORCH_LLM_ALLREDUCE, torch_llm_allreduce_);
+  // set CCL_SKIP_SCHEDULER=1 for torch_llm_allreduce_
+  if (torch_llm_allreduce_) setOneCCLEnvVar("CCL_SKIP_SCHEDULER", 1);
+  if (torch_llm_allreduce_) useSameStream_ = true;
+    // set blockingWait_ default as false for CCL_SKIP_SCHEDULER=1 as CCL SCHEDULER can only sync execution
+  int ccl_skip_scheduler = getOneCCLEnvVar("CCL_SKIP_SCHEDULER");
+  if (ccl_skip_scheduler == 1) blockingWait_ = false;
+
+  useSameStream_ = parseTorchCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
+  blockingWait_ = parseTorchCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);
 #ifdef NDEBUG
     TORCH_CHECK(!oneccl_bindings_for_pytorch_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
 #else

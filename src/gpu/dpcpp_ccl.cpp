@@ -124,7 +124,7 @@ namespace
 
     c10::Stream llm_torch_stream(c10::Stream::DEFAULT, c10::Device(c10::DeviceType::XPU, 0));
     void check_llm_allreduce_env(c10d::ProcessGroupCCL& pg_ccl, const std::vector<at::Device>& devices) {
-        char *use_llm_allreduce_str = getenv("TORCH_LLM_ALLREDUCE");
+        char *use_llm_allreduce_str = getenv("TORCH_LLM_ALLREDUCE_DEBUG");
         if (use_llm_allreduce_str) {
             last_use_llm_allreduce = use_llm_allreduce;
             use_llm_allreduce = atoi(use_llm_allreduce_str);

@@ -99,6 +99,8 @@ constexpr const char* CCL_BLOCKING_WAIT = "CCL_BLOCKING_WAIT";
 // communication stream for collectives
 constexpr const char* CCL_SAME_STREAM = "CCL_SAME_STREAM";
 
+constexpr const char* TORCH_LLM_ALLREDUCE = "TORCH_LLM_ALLREDUCE";
+
 #if TORCH_VERSION_MAJOR > 1
 using Baseclass = Backend;
 #else
@@ -278,6 +280,8 @@ public:
   // Environment variable which controls whether to keep same stream
   // for collectives and compute
   bool useSameStream_ = false;
+
+  bool torch_llm_allreduce_ = false;
 
   // Flag to denote if a coalescing groupStart/groupEnd block is active
   bool is_coalescing_ = false;

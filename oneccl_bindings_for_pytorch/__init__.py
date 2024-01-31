@@ -13,15 +13,6 @@ def set_env_default(env, key, value):
     new_value = env.get(key, value)
     env[key] = new_value
 
-
-if os.environ.get("CCL_ROOT") is None:
-    # set the default oneCCL and MPI library path
-    set_env_default(os.environ, 'CCL_ROOT', cwd)
-
-    FI_PROVIDER_PATH = os.path.join(cwd, "lib/prov")
-    set_env_default(os.environ, 'FI_PROVIDER_PATH', FI_PROVIDER_PATH)
-
-
 from .version import __version__, git_version
 from . import _C as ccl_lib
 

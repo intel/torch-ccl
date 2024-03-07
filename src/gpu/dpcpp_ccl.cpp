@@ -722,7 +722,9 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_impl(st
 
       ccl::event ret_evt;
       if (disable_allreduce != 0 || world_size == 1) {
-        return ret_evt;
+        sycl::event sycl_evt;
+	sycl_evt = stream.get_native().ext_oneapi_submit_barrier();
+        return ccl::event::create_from_native(sycl_evt);
       }
 
       if (llm_allreduce_available(input, world_size, local_world_size, opts)) {

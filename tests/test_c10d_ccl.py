@@ -613,6 +613,36 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
                 c10d.reduce_scatter_tensor(output_tensors[i], input_tensors[i])
         
         self.assertEqual(output_tensors, input_tensors[self.rank] * self.world_size)
+    
+    def _test_broadcast_coalesced(self, process_group, device, root_rank):
+        target = torch.ones(60, dtype=torch.bool, device=device).chunk(5)
+        
+        # The tensors to pass to broadcast are idential to the target
+        # only on the process that is the root of the broadcast.
+        if self.rank == root_rank:
+            tensors = [tensor.clone() for tensor in target]
+        else:
+            tensors = [torch.zeros_like(tensor) for tensor in target]
+
+        if self.rank != root_rank:
+            self.assertNotEqual(tensors, target)
+        
+        c10d._broadcast_coalesced(
+            process_group, tensors, buffer_size=256, src=root_rank
+        )
+
+        if self.rank != root_rank:
+            self.assertEqual(tensors, target)
+
+    @skip_if_no_xpu
+    def test_broadcast_coalesced_xpu(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        c10d.init_process_group(backend="ccl", store=store, rank=self.rank, world_size=self.world_size)
+        process_group = c10d.distributed_c10d._get_default_group()
+        device = torch.device("xpu:%d" % self.rank)
+        ranks = [0, 1]
+        for root_rank in ranks:
+            self._test_broadcast_coalesced(process_group, device, root_rank)
         
 if __name__ == '__main__':
     run_tests()

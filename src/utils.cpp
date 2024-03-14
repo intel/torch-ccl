@@ -54,6 +54,7 @@ std::map<at::ScalarType, ccl::datatype> cclDatatypes =
     {at::kFloat, ccl::datatype::float32},
     {at::kDouble, ccl::datatype::float64},
     {at::kBFloat16, ccl::datatype::bfloat16},
+    {at::kBool, ccl::datatype::uint8},
   };
 
 // Get the key from the list of devices

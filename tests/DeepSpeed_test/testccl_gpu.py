@@ -94,7 +94,7 @@ def test_ccl(ops, sizes,  roots, device, rank, rounds):
                 print("Rank {}: broadcast from {} w/ size {}".format(rank, roots[i], len(input[i])))
                 dist.broadcast(input[i], roots[i], async_op=False)
 
-            # torch.xpu.synchronize()
+            torch.xpu.synchronize()
         
 if __name__ == '__main__':
     main()

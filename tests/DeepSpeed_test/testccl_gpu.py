@@ -3,8 +3,24 @@ import torch.distributed as dist
 from torch.multiprocessing import Process
 import os
 import intel_extension_for_pytorch
+import argparse
+import sys
 
-world_size = 12
+datatype_map = {
+    'bf16': torch.bfloat16,
+    'fp32': torch.float32
+}
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--datatype', '-d', type=str, default='bf16', help='Data type')
+parser.add_argument('--world_size', default=12, type=int, help='Number of gpu for distributed training')
+args = parser.parse_args()
+type = datatype_map.get(args.datatype)
+if type is None:
+    print(f'Unknown datatype: {args.datatype}')
+    sys.exit(1)
+
+world_size = args.world_size
 rounds = 100
 # input_file = "Example.csv"
 input_file = "DeepSpeed.csv"

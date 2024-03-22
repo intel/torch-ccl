@@ -583,6 +583,17 @@ void setOneCCLEnvVar(std::string envVarName, int val) {
     setenv(envVarName.c_str(), std::to_string(val).c_str(), val);
 }
 
+void setOneCCLEnvVar(std::string envVarName, std::string val) {
+    setenv(envVarName.c_str(), val.c_str(), 1);
+}
+
+bool with_mpirun() {
+    return (getenv("MPI_LOCALRANKID") || getenv("MPI_LOCALNRANKS") || getenv("PMI_RANK") ||
+            getenv("PMI_SIZE") || getenv("PMIX_RANK"))
+               ? true
+               : false;
+}
+
 ProcessGroupCCL::AsyncWorkCCL::AsyncWorkCCL(std::vector<std::vector<at::Tensor>> outputTensors,
                                             int rank,
                                             c10d::OpType opType,
@@ -676,6 +687,44 @@ ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int ran
 
   useSameStream_ = parseTorchCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
   blockingWait_ = parseTorchCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);
+
+  // With this setting procedure, you are able to initialize torch.distributed package without explicit 
+  // environment variables setting. 
+  int local_rank = getOneCCLEnvVar("RANK");
+  int world_size = getOneCCLEnvVar("WORLD_SIZE");
+  bool rank_size_not_set = (local_rank ==-1 || world_size ==-1);
+
+  if (with_mpirun()) {
+    // It's launched by mpirun, such as 'mpirun -np n python xxx.py'.
+    if (rank_size_not_set) {
+        // Requiring variables 'RANK' and 'WORLD_SIZE' were not set yet. 
+        // We'll get them through 'PMI_RANK' and 'PMI_SIZE'.
+        int pmi_rank = getOneCCLEnvVar("PMI_RANK");
+        int pmi_size = getOneCCLEnvVar("PMI_SIZE");
+        if (pmi_rank != -1 && pmi_size != -1) {
+            // Now we only support implicit setting with intel mpi
+            local_rank = pmi_rank;
+            world_size = pmi_size;
+
+            // Set environment variables.
+            setOneCCLEnvVar("WORLD_SIZE", world_size);
+            setOneCCLEnvVar("RANK", local_rank);
+        }
+    }
+  } else {
+    // Launched by torchrun or multi-processing package of python.
+    // We'll set varibales only if 'RANK' and 'WORLD_SIZE' were not set.
+    if (rank_size_not_set) {
+        local_rank = getOneCCLEnvVar("LOCAL_RANK");
+        world_size = getOneCCLEnvVar("WORLD_SIZE");
+        if (local_rank != -1 && world_size != -1) {
+            setOneCCLEnvVar("CCL_PROCESS_LAUNCHER", "none");
+            setOneCCLEnvVar("CCL_LOCAL_SIZE", world_size);
+            setOneCCLEnvVar("CCL_LOCAL_RANK", local_rank);
+        }
+    }
+  }
+
 #ifdef NDEBUG
     TORCH_CHECK(!oneccl_bindings_for_pytorch_wait_gdb(), "Cannot force torch ccl wait for gdb attaching in release version");
 #else

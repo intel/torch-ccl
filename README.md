@@ -36,7 +36,7 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
-   | [v2.2.0](https://github.com/pytorch/pytorch/tree/v2.2.0)        |  [ccl_torch2.2.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.2.0%2Bcpu)   |
+   | [v2.2.0](https://github.com/pytorch/pytorch/tree/v2.2.0)        |  [v2.2.0+cpu](https://github.com/intel/torch-ccl/tree/v2.2.0%2Bcpu)   |
    | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.0%2Bcpu)   |
    | [v2.0.1](https://github.com/pytorch/pytorch/tree/v2.0.1)        |  [ccl_torch2.0.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.0.100)   |
    | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
@@ -50,7 +50,7 @@ We recommend using Anaconda as Python package management system. The followings 
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0)        |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)     |
    | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |  [beta09](https://github.com/intel/torch-ccl/tree/beta09)                 |
 
-The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.9 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable `alltoall` collective communication primitive. The patch file about these two PRs is in `patches` directory and you can use it directly.
+The usage details can be found in the README of corresponding branch. The following part is about the usage of v2.2.0 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable `alltoall` collective communication primitive. The patch file about these two PRs is in `patches` directory and you can use it directly.
 
 ## Requirements
 
@@ -70,7 +70,7 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
 | CCL_SHA_VERSION                     | False          | add git head sha version to Wheel name                                                              |
 
-## Lunch Option List
+## Launch Option List
 
 The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
 
@@ -119,8 +119,16 @@ Wheel files are avaiable for the following Python versions.
 | 1.11.0            |            | √          | √          | √          | √           |             |
 | 1.10.0            | √          | √          | √          | √          |             |             |
 
+Install CPU version
+
 ```bash
-python -m pip install oneccl_bind_pt==2.0.100 -f https://developer.intel.com/ipex-whl-stable-xpu
+python -m pip install oneccl_bind_pt --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
+```
+
+Install XPU version
+
+```bash
+python -m pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable-xpu
 ```
 
 ### Runtime Dynamic Linking

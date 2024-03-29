@@ -941,6 +941,8 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::broadcast_(std::v
                                              stream,
                                              attr));
       });
+      // Add wait explicitly due to oneCCL hang for async execution
+      ret_evt.wait();
       return ret_evt;
     },
     c10d::OpType::BROADCAST);

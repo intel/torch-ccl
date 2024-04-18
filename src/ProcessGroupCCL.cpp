@@ -688,41 +688,22 @@ ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int ran
   useSameStream_ = parseTorchCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
   blockingWait_ = parseTorchCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);
 
-  // With this setting procedure, you are able to initialize torch.distributed package without explicit 
-  // environment variables setting. 
-  int local_rank = getOneCCLEnvVar("RANK");
-  int world_size = getOneCCLEnvVar("WORLD_SIZE");
-  bool rank_size_not_set = (local_rank ==-1 || world_size ==-1);
+  // Set these 3 variables to follow oneCCL specs, which is required to enable use drmfd mode of ze exchange mechanism.
+  if (!with_mpirun()) {
+    // If it's launched by 'torchrun', LOCAL_RANK and LOCAL_WORLD_SIZE were set.
+    int local_rank = getOneCCLEnvVar("LOCAL_RANK");
+    int local_world_size = getOneCCLEnvVar("LOCAL_WORLD_SIZE");
 
-  if (with_mpirun()) {
-    // It's launched by mpirun, such as 'mpirun -np n python xxx.py'.
-    if (rank_size_not_set) {
-        // Requiring variables 'RANK' and 'WORLD_SIZE' were not set yet. 
-        // We'll get them through 'PMI_RANK' and 'PMI_SIZE'.
-        int pmi_rank = getOneCCLEnvVar("PMI_RANK");
-        int pmi_size = getOneCCLEnvVar("PMI_SIZE");
-        if (pmi_rank != -1 && pmi_size != -1) {
-            // Now we only support implicit setting with intel mpi
-            local_rank = pmi_rank;
-            world_size = pmi_size;
-
-            // Set environment variables.
-            setOneCCLEnvVar("WORLD_SIZE", world_size);
-            setOneCCLEnvVar("RANK", local_rank);
-        }
+    // If these 2 variables were not set, it's launched by multi-processing package. In that case we'll
+    // use rank and size.
+    if (local_rank == -1 || local_world_size == -1) {
+        local_rank = rank;
+        local_world_size = size;
     }
-  } else {
-    // Launched by torchrun or multi-processing package of python.
-    // We'll set varibales only if 'RANK' and 'WORLD_SIZE' were not set.
-    if (rank_size_not_set) {
-        local_rank = getOneCCLEnvVar("LOCAL_RANK");
-        world_size = getOneCCLEnvVar("WORLD_SIZE");
-        if (local_rank != -1 && world_size != -1) {
-            setOneCCLEnvVar("CCL_PROCESS_LAUNCHER", "none");
-            setOneCCLEnvVar("CCL_LOCAL_SIZE", world_size);
-            setOneCCLEnvVar("CCL_LOCAL_RANK", local_rank);
-        }
-    }
+    
+    setOneCCLEnvVar("CCL_PROCESS_LAUNCHER", "none");
+    setOneCCLEnvVar("CCL_LOCAL_RANK", local_rank);
+    setOneCCLEnvVar("CCL_LOCAL_SIZE", local_world_size);
   }
 
 #ifdef NDEBUG

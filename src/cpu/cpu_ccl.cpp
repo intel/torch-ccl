@@ -561,56 +561,27 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vecto
           ccl::alltoallv_attr attr,
           ccl::communicator& comm) {
 
-      std::vector<size_t> sendCounts(grp_size, 0);
-      std::vector<size_t> recvCounts(grp_size, 0);
-      sendCounts[opts.rootRank] = input.numel();
+            ccl::event ret_evt;
+            size_t count = input.numel();
+            auto type = cclDatatypes.at(input.scalar_type());
+            int root = opts.rootRank;
 
-      at::Tensor flatOutput;
-      int64_t flatRecvCount = 0;
-       bool isOutputFlat = false;
-
-      if (rank == opts.rootRank)
-      {
-          isOutputFlat =
-              computeLengthsAndCheckAndGetFlat(outputs,
-                                               recvCounts, flatOutput, flatRecvCount);
-          TORCH_CHECK(sendCounts[rank] == recvCounts[rank],
-              "gather: send and recv count doesn't match");
-      }
-      else
-      {
-          flatOutput = at::empty({0}, input.options());
-      }
-      
-      ccl::event ret_evt;
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-          CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr(),
-                                             sendCounts,
-                                             flatOutput.data_ptr(),
-                                             recvCounts,
-                                             cclDatatypes.at(flatOutput.scalar_type()),
-                                             comm,
-                                             attr););
-      });
-
-
-      if (rank == opts.rootRank)
-      {
-          if (!isOutputFlat)
-          {
-              ret_evt.wait();
-              auto flatOutputSplits =
-                  flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recvCounts.data(),
-                                              recvCounts.size()), 0);
-
-              for (int i = 0; i < grp_size; i++)
-              {
-                  outputs[i].view({-1}).copy_(flatOutputSplits[i]);
-              }
-          }
-       }
-
-       return ret_evt;
+            if (rank == root) {
+                for (const auto r: c10::irange(grp_size)) {
+                    if (r != root) {
+                        // do receive
+                        CCL_CHECK(ret_evt = ccl::recv(outputs[r].data_ptr(), count, type, r, comm));
+                    } else {
+                        // on its own rank, simply copy from the input
+                        outputs[r].copy_(input);
+                    }
+                }
+            } else {
+                // do send
+                CCL_CHECK(ret_evt = ccl::send(input.data_ptr(), count, type, root, comm));
+            }
+            
+            return ret_evt;
   },
   c10d::OpType::GATHER,
   "oneccl_bindings_for_pytorch::cpu_work::gather");

@@ -1128,58 +1128,27 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
               ccl::communicator& comm,
               ccl::stream& stream) {
 
-              std::vector<size_t> sendCounts(grp_size, 0);
-              std::vector<size_t> recvCounts(grp_size, 0);
-              sendCounts[opts.rootRank] = input.numel();
+                ccl::event ret_evt;
+                size_t count = input.numel();
+                auto type = cclDatatypes.at(input.scalar_type());
+                int root = opts.rootRank;
 
-              at::Tensor flatOutput;
-              int64_t flatRecvCount = 0;
-              bool isOutputFlat = false;
-
-              if (rank == opts.rootRank)
-              {
-                isOutputFlat =
-                        computeLengthsAndCheckAndGetFlat(outputs,
-                                                         recvCounts, flatOutput, flatRecvCount);
-                TORCH_CHECK(sendCounts[rank] == recvCounts[rank],
-                            "gather: send and recv count doesn't match");
-              }
-              else
-              {
-                // a workaround for the oneCCL to pass the address checking
-                flatOutput = at::empty({1}, input.options());
-              }
-
-              ccl::event ret_evt;
-              call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-                  CCL_CHECK(ret_evt = ccl::alltoallv(input.data_ptr(),
-                                                     sendCounts,
-                                                     flatOutput.data_ptr(),
-                                                     recvCounts,
-                                                     cclDatatypes.at(flatOutput.scalar_type()),
-                                                     comm,
-                                                     stream));
-              });
-
-              // TODO : add to post and pre hooks
-              if (rank == opts.rootRank)
-              {
-                if (!isOutputFlat)
-                {
-                  // TODO: add dependency instead of waiting explicitly.
-                  ret_evt.wait();
-                  auto flatOutputSplits =
-                          flatOutput.split_with_sizes(c10::IntArrayRef((int64_t*)recvCounts.data(),
-                                                                       recvCounts.size()), 0);
-
-                  for (int i = 0; i < grp_size; i++)
-                  {
-                    outputs[i].view({-1}).copy_(flatOutputSplits[i]);
-                  }
+                if (rank == root) {
+                    for (const auto r: c10::irange(grp_size)) {
+                        if (r != root) {
+                            // do receive
+                            CCL_CHECK(ret_evt = ccl::recv(outputs[r].data_ptr(), count, type, r, comm, stream));
+                        } else {
+                            // on its own rank, simply copy from the input
+                            outputs[r].copy_(input);
+                        }
+                    }
+                } else {
+                    // do send
+                    CCL_CHECK(ret_evt = ccl::send(input.data_ptr(), count, type, root, comm, stream));
                 }
-              }
-
-              return ret_evt;
+                
+                return ret_evt;
           },
           c10d::OpType::GATHER);
 

@@ -1,6 +1,6 @@
 # Intel® oneCCL Bindings for PyTorch (formerly known as torch_ccl)
 
-This repository holds PyTorch bindings maintained by Intel for the Intel® oneAPI Collective Communications Library (oneCCL).
+This repository holds PyTorch bindings maintained by Intel® for the Intel® oneAPI Collective Communications Library (oneCCL).
 
 ## Introduction
 
@@ -36,6 +36,8 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
+   | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.200](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.200+xpu)   |
+   | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.100+xpu)   |
    | [v2.0.1](https://github.com/pytorch/pytorch/tree/v2.0.1)        |  [ccl_torch2.0.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.0.100)   |
    | [v1.13](https://github.com/pytorch/pytorch/tree/v1.13)          |  [ccl_torch1.13](https://github.com/intel/torch-ccl/tree/ccl_torch1.13)   |
    | [v1.12.1](https://github.com/pytorch/pytorch/tree/v1.12.1)      |  [ccl_torch1.12.100](https://github.com/intel/torch-ccl/tree/ccl_torch1.12.100)   |
@@ -54,7 +56,7 @@ The usage details can be found in the README of corresponding branch. The follow
 
 - Python 3.8 or later and a C++17 compiler
 
-- PyTorch v2.0.1
+- PyTorch v2.1.2
 
 ## Build Option List
 
@@ -68,14 +70,15 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
 | CCL_SHA_VERSION                     | False          | add git head sha version to Wheel name                                                              |
 
-## Lunch Option List
+## Launch Option List
 
-The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
+The following launch options are supported in Intel® oneCCL Bindings for PyTorch*.
 
-| Lunch Option                             | Default Value | Description                                                           |
+| Launch Option                             | Default Value | Description                                                           |
 | :--------------------------------------- | :------------ | :-------------------------------------------------------------------- |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |
+| TORCH_LLM_ALLREDUCE                      | 0             | Set 1 to enable experimental allreduce algorithm. This is an experimental feature to provide another allreduce implementation with better performance especially in LLM inference scenarios. This feature speeds up single node performance with up to 4 Intel® Data Center GPU Max 1550 cards and requires XeLink enabled for cross-cards communication.|
 
 ## Installation
 
@@ -108,6 +111,8 @@ Wheel files are avaiable for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: |
+| 2.1.200           |            |            | √          | √          | √           | √           |
+| 2.1.100           |            |            | √          | √          | √           | √           |
 | 2.0.100           |            |            | √          | √          | √           | √           |
 | 1.13              |            | √          | √          | √          | √           |             |
 | 1.12.100          |            | √          | √          | √          | √           |             |
@@ -116,8 +121,10 @@ Wheel files are avaiable for the following Python versions.
 | 1.10.0            | √          | √          | √          | √          |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==2.0.100 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+python -m pip install oneccl_bind_pt==2.1.200 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
 ```
+
+**Note:** Please set proxy or update URL address to https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/ if you meet connection issue.
 
 ### Runtime Dynamic Linking
 
@@ -181,7 +188,6 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```bash
 source $basekit_root/ccl/latest/env/vars.sh
 source $basekit_root/mpi/latest/env/vars.sh
-```
 
 mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 ```

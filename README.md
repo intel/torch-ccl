@@ -36,6 +36,7 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
+   | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.300](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.300+xpu)   |
    | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.200](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.200+xpu)   |
    | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.100+xpu)   |
    | [v2.0.1](https://github.com/pytorch/pytorch/tree/v2.0.1)        |  [ccl_torch2.0.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.0.100)   |
@@ -78,7 +79,9 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
 | :--------------------------------------- | :------------ | :-------------------------------------------------------------------- |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |
-| TORCH_LLM_ALLREDUCE                      | 0             | Set 1 to enable experimental allreduce algorithm. This is an experimental feature to provide another allreduce implementation with better performance especially in LLM inference scenarios. This feature speeds up single node performance with up to 4 Intel® Data Center GPU Max 1550 cards and requires XeLink enabled for cross-cards communication.|
+| TORCH_LLM_ALLREDUCE                      | 0             | Set 1 to enable this prototype feature for better scale-up performance. This is a prototype feature to provide better scale-up performance by enabling optimized collective algorithms in oneCCL and asynchronous execution in torch-ccl. This feature requires XeLink enabled for cross-cards communication.|
+| CCL_BLOCKING_WAIT                        | 0             | Set 1 to enable this prototype feature, which is to control whether collectives execution on XPU is host blocking or non-blocking. |
+| CCL_SAME_STREAM                          | 0             | Set 1 to enable this prototype feature, which is to allow using a computation stream as communication stream to minimize overhead for streams synchronization. |
 
 ## Installation
 
@@ -107,10 +110,11 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
 
 ### Install PreBuilt Wheel
 
-Wheel files are available for the following Python versions.
+Wheel files are available for the following Python versions. Please always use the latest release to get started.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: |
+| 2.1.300           |            |            | √          | √          | √           | √           |
 | 2.1.200           |            |            | √          | √          | √           | √           |
 | 2.1.100           |            |            | √          | √          | √           | √           |
 | 2.0.100           |            |            | √          | √          | √           | √           |
@@ -121,7 +125,7 @@ Wheel files are available for the following Python versions.
 | 1.10.0            | √          | √          | √          | √          |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==2.1.200 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+python -m pip install oneccl_bind_pt==2.1.300 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
 ```
 
 **Note:** Please set proxy or update URL address to https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/ if you meet connection issue.

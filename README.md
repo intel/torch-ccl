@@ -6,7 +6,7 @@ This repository holds PyTorch bindings maintained by Intel® for the Intel® one
 
 [PyTorch](https://github.com/pytorch/pytorch) is an open-source machine learning framework.
 
-[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library) is a library for efficient distributed deep learning training implementing such collectives like `allreduce`, `allgather`, `alltoall`. For more information on oneCCL, please refer to the [oneCCL documentation](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html).
+[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library) is a library for efficient distributed deep learning training, implementing collectives like `allreduce`, `allgather`, `alltoall`. For more information on oneCCL, please refer to the [oneCCL documentation](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html).
 
 `oneccl_bindings_for_pytorch` module implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now.
 
@@ -50,13 +50,13 @@ We recommend using Anaconda as Python package management system. The followings 
    | [v1.6.0](https://github.com/pytorch/pytorch/tree/v1.6.0)        |  [ccl_torch1.6](https://github.com/intel/torch-ccl/tree/ccl_torch1.6)     |
    | [v1.5-rc3](https://github.com/pytorch/pytorch/tree/v1.5.0-rc3)  |  [beta09](https://github.com/intel/torch-ccl/tree/beta09)                 |
 
-The usage details can be found in the README of corresponding branch. The following part is about the usage of v1.9 tag. if you want to use other version of torch-ccl please checkout to that branch(tag). For pytorch-1.5.0-rc3, the [#PR28068](https://github.com/pytorch/pytorch/pull/28068) and [#PR32361](https://github.com/pytorch/pytorch/pull/32361) are need to dynamicall register external ProcessGroup and enable `alltoall` collective communication primitive. The patch file about these two PRs is in `patches` directory and you can use it directly.
+The usage details can be found in the README of corresponding branch.
 
 ## Requirements
 
 - Python 3.8 or later and a C++17 compiler
 
-- PyTorch v2.1.2
+- PyTorch v2.1.0
 
 ## Build Option List
 
@@ -64,11 +64,11 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 
 | Build Option                        | Default Value  | Description                                                                                         |
 | :---------------------------------- | :------------- | :-------------------------------------------------------------------------------------------------- |
-| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
+| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEND`,set to `dpcpp`  and use DPC++ compiler to enable support for Intel XPU |
 | USE_SYSTEM_ONECCL                   | OFF            | Use oneCCL library in system                                                                        |
-| CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
-| ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
-| CCL_SHA_VERSION                     | False          | add git head sha version to Wheel name                                                              |
+| CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set wheel name                                                                                      |
+| ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set backend                                                                                         |
+| CCL_SHA_VERSION                     | False          | Add git head sha version to be wheel name                                                              |
 
 ## Launch Option List
 
@@ -100,14 +100,14 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
    # for XPU Backend: use DPC++ Compiler to enable support for Intel XPU
    # build with oneCCL from third party
    COMPUTE_BACKEND=dpcpp python setup.py install
-   # build without oneCCL
+   # build with oneCCL from basekit
    export INTELONEAPIROOT=${HOME}/intel/oneapi
    USE_SYSTEM_ONECCL=ON COMPUTE_BACKEND=dpcpp python setup.py install
    ```
 
 ### Install PreBuilt Wheel
 
-Wheel files are avaiable for the following Python versions.
+Wheel files are available for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: |

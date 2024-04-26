@@ -91,6 +91,7 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
 
    ```bash
    git clone https://github.com/intel/torch-ccl.git && cd torch-ccl
+   git checkout ccl_torch2.1.300+xpu
    git submodule sync
    git submodule update --init --recursive
    ```

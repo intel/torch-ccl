@@ -64,7 +64,7 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 
 | Build Option                        | Default Value  | Description                                                                                         |
 | :---------------------------------- | :------------- | :-------------------------------------------------------------------------------------------------- |
-| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEDN`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
+| COMPUTE_BACKEND                     |                | Set oneCCL `COMPUTE_BACKEND`,set to `dpcpp`  and use DPC++ Compiler to enable support for Intel XPU |
 | USE_SYSTEM_ONECCL                   | OFF            | Use oneCCL library in system                                                                        |
 | CCL_PACKAGE_NAME                    | oneccl-bind-pt | Set Wheel Name                                                                                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_BACKEND | cpu            | Set BACKEND                                                                                         |
@@ -72,9 +72,9 @@ The following build options are supported in Intel® oneCCL Bindings for PyTorch
 
 ## Launch Option List
 
-The following lunch options are supported in Intel® oneCCL Bindings for PyTorch*.
+The following launch options are supported in Intel® oneCCL Bindings for PyTorch*.
 
-| Lunch Option                             | Default Value | Description                                                           |
+| Launch Option                             | Default Value | Description                                                           |
 | :--------------------------------------- | :------------ | :-------------------------------------------------------------------- |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_VERBOSE  | 0             | Set verbose level in ONECCL_BINDINGS_FOR_PYTORCH                      |
 | ONECCL_BINDINGS_FOR_PYTORCH_ENV_WAIT_GDB | 0             | Set 1 to force the oneccl_bindings_for_pytorch wait for GDB attaching |

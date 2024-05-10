@@ -80,22 +80,6 @@ int get_sync_only(int init_value = 0) {
   return tmp_sync_only;
 }
 
-
-#define CCL_KERNEL_SUBMIT(cmd, q) \
-({bool profile_barrier = (xpu::is_profiler_enabled());                        \
-    sycl::event start_evt;                                                    \
-    if (profile_barrier) {                                                    \
-      start_evt = q.ext_oneapi_submit_barrier();                              \
-    }                                                                         \
-    CCL_CHECK(cmd);                                                    \
-                                                                              \
-    sycl::event end_evt;                                                      \
-    if (profile_barrier) {                                                    \
-      end_evt = q.ext_oneapi_submit_barrier();                                \
-      xpu::profiler_record("oneccl", start_evt, end_evt);                     \
-    }                          \
-    })
-
 namespace
 {
     int use_llm_allreduce =  0;
@@ -750,14 +734,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_impl(st
     }
 
     call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-        CCL_KERNEL_SUBMIT(ret_evt = ccl::allreduce(input.data_ptr(),
+        CCL_CHECK(ret_evt = ccl::allreduce(input.data_ptr(),
                                             output.data_ptr(),
                                             (size_t) input.numel(),
                                             cclDatatypes.at(input.scalar_type()),
                                             cclOps.at(opts.reduceOp),
                                             comm,
                                             stream,
-                                            attr), stream.get_native());
+                                            attr));
       });
     // printf("Use One CCL allreduce.\n");
     return ret_evt;

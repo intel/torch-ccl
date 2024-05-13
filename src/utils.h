@@ -337,7 +337,9 @@ protected:
         throw std::runtime_error("Torch CCL only support one device per process now");
       }
 
-      for (size_t i = 0; i < inputs.size(); i++) {
+      // Some primitives have empty input(scatter), so we get the size after checking size of input and output.
+      auto size = inputs.empty()?outputs.size():inputs.size();
+      for (size_t i = 0; i < size; i++) {
         CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[0], comms.streams[0 + INDEX]...)));
       }
     }
@@ -363,7 +365,9 @@ protected:
   typename std::enable_if<!is_vector<T>::value, void>::type run_wrap_() {
     if (rets.empty()) {
       auto& outputs = outputTensors_[0];
-      for (size_t i = 0; i < inputs.size(); i++) {
+      // Some primitives have empty input(scatter), so we get the size after checking size of input and output.
+      auto size = inputs.empty()?outputs.size():inputs.size();
+      for (size_t i = 0; i < size; i++) {
         CCL_CHECK(rets.push_back(f(inputs[i], outputs[i], attr, comms.comms[i], comms.streams[i], comms.torch_streams[i])));
       }
     }
@@ -662,12 +666,16 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> collective(
   attr_t attr = ccl::create_operation_attr<attr_t>();
 
   std::vector<at::Device> devices;
-  if (inputs.empty()) {
+  if (inputs.empty() && outputs.empty()) {
     // Coalesced op has empty tensors for both input and output. 
     // Use 'coalescedDevices_' as devices, which should have same set of devices across collectives
     devices = {pg_ccl.coalescedDevices_[0]};
   } else {
-    devices = get_device_list(inputs);
+    if (!inputs.empty()) {
+      devices = get_device_list(inputs);
+    } else {
+      devices = get_device_list(outputs);
+    }
   }
 
   const auto key = get_key_from_devs(devices);

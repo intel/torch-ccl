@@ -286,7 +286,38 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     @skip_if_not_multixpu
     def test_gather_basics_multi_xpu(self):
         self._test_gather_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
-   
+        
+    def _test_scatter_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        # Preallocate tensors for input/output
+        
+        inputs = [fn(torch.tensor([rank])) for rank in range(self.world_size)]
+        output = [fn(torch.tensor([-1]))]
+        expected = [torch.tensor([self.rank])]
+        
+        for i in range(self.world_size):
+            opts = c10d.ScatterOptions()
+            opts.rootRank = i
+            if i == self.rank:
+                work = pg.scatter(output, [inputs], opts)
+            else:
+                work = pg.scatter(output, [], opts)
+            work.wait()
+            self.assertEqual(expected, output)
+
+    def test_scatter_basics(self):
+        self._test_scatter_basics(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_scatter_basics_xpu(self):
+        self._test_scatter_basics(lambda t: t.clone().xpu())
+
+    @skip_if_not_multixpu
+    def test_scatter_basics_multi_xpu(self):
+        self._test_scatter_basics(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+                
     def test_allgather_base_ops(self):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)

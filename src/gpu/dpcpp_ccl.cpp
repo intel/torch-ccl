@@ -369,7 +369,7 @@ public:
              const c10::optional<std::vector<at::Tensor>>& inputTensors) :
              CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors), 
-                     is_coalescing_end(inputs.empty()) {}
+                     is_coalescing_end(inputs.empty() && outputs.empty()) {}
 
   void run() override {
     // Return immediately if current op is coalescing_end since inputs and outputs are empty. 
@@ -559,6 +559,11 @@ protected:
                                                          std::vector<at::Tensor>& inputTensors,
                                                          const GatherOptions& opts,
                                                          ProcessGroupCCL& pg) override;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> scatter_(std::vector<at::Tensor>& outputTensors,
+                                                             std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                             const ScatterOptions& opts,
+                                                             ProcessGroupCCL& pg_ccl) override;
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> alltoall_(std::vector<at::Tensor>& outputTensors,
                                                            std::vector<at::Tensor>& inputTensors,
@@ -1137,6 +1142,76 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::gather_(std::vect
           c10d::OpType::GATHER);
 
   work->debugName = std::string("xpu::gather");
+  execute(work);
+
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                    std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                    const ScatterOptions& opts,
+                                                                    ProcessGroupCCL& pg) {
+  static auto invalidArgument = [](const std::string& msg) {
+    C10_THROW_ERROR(ValueError, "ProcessGroupCCL::scatter: " + msg);
+  };
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  auto grp_size = pg.getSize();
+  auto rank = pg.getRank();
+
+  if (rank == opts.rootRank) {
+    if (inputTensors.size() != 1) {
+      std::stringstream ss;
+      ss << "requires a single-element input list containing a list with " << grp_size << " tensors.";
+      invalidArgument(ss.str());
+    } else if (inputTensors[0].size() != static_cast<size_t>(grp_size)) {
+      std::stringstream ss;
+      ss << "Incorrect input list size " << inputTensors[0].size()
+        << ". Input list size should be " << grp_size
+        << ", same as size of the process group.";
+        invalidArgument(ss.str());
+    }
+  }
+  else {
+    TORCH_CHECK(inputTensors.size() == 0,
+                "scatter: number of input tensors should be 0 "
+                "for non-root");
+  }
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+          pg,
+          inputTensors,
+          outputTensors,
+          [=](const std::vector<at::Tensor>& inputs,
+              at::Tensor output,
+              ccl::alltoallv_attr attr,
+              ccl::communicator& comm,
+              ccl::stream& stream) {
+                ccl::event ret_evt;
+                int root = opts.rootRank;
+                if (rank == root) {
+                    for (const auto r: c10::irange(grp_size)) {
+                        if (r != root) {
+                            // do send
+                            size_t send_count = inputs[r].numel();
+                            auto send_type = cclDatatypes.at(inputs[r].scalar_type());
+                            CCL_CHECK(ret_evt = ccl::send(inputs[r].data_ptr(), send_count, send_type, r, comm, stream));
+                        } else {
+                            // on its own rank, simply copy from the input
+                            output.copy_(inputs[r]);
+                        }
+                    }
+                } else {
+                    // do receive
+                    size_t recv_count = output.numel();
+                    auto recv_type = cclDatatypes.at(output.scalar_type());
+                    CCL_CHECK(ret_evt = ccl::recv(output.data_ptr(), recv_count, recv_type, root, comm, stream));
+                }
+                
+                return ret_evt;
+          },
+          c10d::OpType::SCATTER);
+
+  work->debugName = std::string("xpu::scatter");
   execute(work);
 
   return work;

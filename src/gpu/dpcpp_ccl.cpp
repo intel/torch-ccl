@@ -420,8 +420,13 @@ public:
           // is not as computation stream(or default stream)
           for(int i = 0; i < this->rets.size(); i++) {
               ccl::event& req = this->rets[i];
-              auto torch_queue = xpu::get_queue_from_stream(this->comms.torch_streams[i]);
-              torch_queue.ext_oneapi_submit_barrier({req.get_native()});
+              const auto devices = get_device_list(this->inputs);
+              for (const auto i : c10::irange(devices.size())) {
+                c10::impl::VirtualGuardImpl impl(devices[i].type());
+                c10::Stream stream = impl.getStream(devices[i]);
+                auto torch_queue = xpu::get_queue_from_stream(stream);
+                torch_queue.ext_oneapi_submit_barrier({req.get_native()});
+              }
           }
       }
   }

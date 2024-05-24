@@ -134,7 +134,8 @@ TORCH_CCL_CPP_API void torch_ccl_python_init(pybind11::module &m) {
                                            py::arg("rank"),
                                            py::arg("size"),
                                            py::arg("timeout") = std::chrono::milliseconds(
-                                                   ::c10d::ProcessGroupCCL::OP_TIMEOUT_MILLIS)));
+                                                   ::c10d::ProcessGroupCCL::OP_TIMEOUT_MILLIS)),
+		                           false, std::vector<std::string>{"xpu", "cpu"});
   
   auto processGroupCCL = intrusive_ptr_no_gil_destructor_class_<::c10d::ProcessGroupCCL>(
           module, "ProcessGroupCCL", backend);

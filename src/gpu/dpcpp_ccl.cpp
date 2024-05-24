@@ -38,6 +38,8 @@
 //#include "allreduce.h"
 #include "allreduce_small.h"
 
+#include <c10/xpu/XPUStream.h>
+
 int disable_allreduce = -1;
 int work_only = -1;
 int sync_only = -1;
@@ -94,7 +96,7 @@ namespace
 
         c10::impl::VirtualGuardImpl impl(devices[0].type());
         c10::Stream stream = impl.getStream(devices[0]);
-        auto q = xpu::get_queue_from_stream(stream);
+        auto q = at::xpu::XPUStream(stream).queue();
         
         gpu_allreducer_fp16.init(q, local_base_rank, total_rank_size);
         gpu_allreducer_small_fp16.init(q, local_base_rank, total_rank_size);
@@ -306,7 +308,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
     if (pg_ccl.useSameStream_) {
         c10::Stream stream = impl.getStream(devices[i]);
         torch_streams.push_back(stream);
-        auto q = xpu::get_queue_from_stream(stream);
+        auto q = at::xpu::XPUStream(stream).queue();
         ccl_streams.push_back(ccl::create_stream(q));
 
         int rank = local_base_rank + i;
@@ -315,7 +317,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
         // XPU doesn't support prioritized stream.
         c10::Stream stream = impl.getStreamFromGlobalPool(devices[i], /*isHighPriority=*/false);
         torch_streams.push_back(stream);
-        auto q = xpu::get_queue_from_stream(stream);
+        auto q = at::xpu::XPUStream(stream).queue();
         ccl_streams.push_back(ccl::create_stream(q));
 
         int rank = local_base_rank + i;
@@ -328,7 +330,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   // TODO: add get default global context API in IPEX.
   c10::impl::VirtualGuardImpl impl(devices[0].type());
   c10::Stream dpcpp_stream = impl.getStream(devices[0]);
-  auto q = xpu::get_queue_from_stream(dpcpp_stream);
+  auto q = at::xpu::XPUStream(dpcpp_stream).queue();
   auto ctx = ccl::create_context(q.get_context());
 
   // Create ccl::communicators
@@ -369,7 +371,7 @@ public:
              const c10::optional<std::vector<at::Tensor>>& inputTensors) :
              CollectiveAsyncWorkCCL<RunF, CommType, InputType, OutputType, attr_t>(
                      inputs, outputs, f, comms, attr, timeout, rank, opType, profilingTitle, inputTensors), 
-                     is_coalescing_end(inputs.empty() && outputs.empty()) {}
+                     is_coalescing_end(inputs.empty()) {}
 
   void run() override {
     // Return immediately if current op is coalescing_end since inputs and outputs are empty. 
@@ -424,7 +426,7 @@ public:
               for (const auto i : c10::irange(devices.size())) {
                 c10::impl::VirtualGuardImpl impl(devices[i].type());
                 c10::Stream stream = impl.getStream(devices[i]);
-                auto torch_queue = xpu::get_queue_from_stream(stream);
+                auto torch_queue = at::xpu::XPUStream(stream).queue();
                 torch_queue.ext_oneapi_submit_barrier({req.get_native()});
               }
           }
@@ -722,7 +724,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::allreduce_impl(st
       }
 
       if (llm_allreduce_available(input, world_size, local_world_size, opts)) {
-        auto q = xpu::get_queue_from_stream(llm_torch_stream);
+        auto q = at::xpu::XPUStream(llm_torch_stream).queue();
         /*
         if (sync_only != 0) {
         gpu_allreducer_fp16.sync_only(stream.get_native(), input.data_ptr(), (size_t)input.numel());  

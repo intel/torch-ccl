@@ -189,8 +189,6 @@ model = torch.nn.parallel.DistributedDataParallel(model, ...)
 ```bash
 source $basekit_root/ccl/latest/env/vars.sh
 source $basekit_root/mpi/latest/env/vars.sh
-```
-
 mpirun -n <N> -ppn <PPN> -f <hostfile> python example.py
 ```
 

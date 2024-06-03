@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-
+import time
 
 from torch.optim.lr_scheduler import StepLR
 
@@ -145,8 +145,8 @@ def fsdp_main(rank, world_size, args):
     xpu_device = "xpu:{}".format(rank)
     torch.xpu.set_device(xpu_device)
 
-    init_start_event = torch.xpu.Event(enable_timing=True)
-    init_end_event = torch.xpu.Event(enable_timing=True)
+    #init_start_event = torch.Event(enable_timing=True)
+    #init_end_event = torch.Event(enable_timing=True)
 
     model = Net().to("xpu:{}".format(rank))
 
@@ -155,16 +155,18 @@ def fsdp_main(rank, world_size, args):
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
-    init_start_event.record()
+    #init_start_event.record()
+    elapsed = time.time()
     for epoch in range(1):
         train(args, model, rank, world_size, train_loader, optimizer, epoch, sampler=sampler1)
         test(model, rank, world_size, test_loader)
         scheduler.step()
 
-    init_end_event.record()
-
+    #init_end_event.record()
+    elapsed = time.time() - elapsed
     if rank == 0:
-        print(f"XPU event elapsed time: {init_start_event.elapsed_time(init_end_event) / 1000}sec")
+        #print(f"XPU event elapsed time: {init_start_event.elapsed_time(init_end_event) / 1000}sec")
+        print(f"XPU event elapsed time: {elapsed}sec")
         print(f"{model}")
 
     if args.save_model:

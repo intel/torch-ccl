@@ -161,6 +161,30 @@ protected:
     return work;
   }
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                          std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                          const ReduceScatterOptions& opts,
+                                                                          ProcessGroupCCL& pg_ccl) override {
+    std::stringstream os;
+    os << "oneccl_bindings_for_pytorch::" << dev_type << "::reduce_scatter: ";
+    format_pg_rank_with_number(os, pg_ccl, ccl_primitive_number++);
+    os << " input ";
+    format_tensors_size(os, inputTensors);
+    os << " output ";
+    format_tensors_size(os, outputTensors);
+    std::cout << os.str() << std::endl;
+
+    auto workStartTime_ = std::chrono::steady_clock::now();
+    auto work = hdlr->reduce_scatter_(outputTensors, inputTensors, opts, pg_ccl);
+    auto currentTimepoint = std::chrono::steady_clock::now();
+    auto timeElapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        currentTimepoint - workStartTime_);
+    format_time_elapsed(os, timeElapsed);
+    std::cout << os.str() << std::endl;
+    return work;
+  }
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
                                                                           at::Tensor& inputTensor,
                                                                           const ReduceScatterOptions& opts,
@@ -607,6 +631,14 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::scatter(std::vec
   checkSameType(outputTensors[0], outputTensors);
   c10::DeviceType dev_type = outputTensors[0].device().type();
   return get_ccl_stub(dev_type)->scatter_(outputTensors, inputTensors, opts, pg_ccl);
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce_scatter(std::vector<at::Tensor>& outputTensors,
+                                                                std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                const ReduceScatterOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl) {
+  c10::DeviceType dev_type = outputTensors[0].device().type();
+  return get_ccl_stub(dev_type)->reduce_scatter_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_reduce_scatter_base(at::Tensor& outputTensor,

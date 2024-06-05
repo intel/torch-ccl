@@ -546,6 +546,11 @@ protected:
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg_ccl) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                          std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                          const ReduceScatterOptions& opts,
+                                                                          ProcessGroupCCL& pg_ccl) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
                                                                           at::Tensor& inputTensor,
                                                                           const ReduceScatterOptions& opts,
@@ -629,6 +634,10 @@ private:
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> allreduce_impl(std::vector<at::Tensor>& tensors,
                                                             const AllreduceOptions& opts,
                                                             ProcessGroupCCL& pg_ccl);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_oop(at::Tensor& outputTensor,
+                                                         at::Tensor& inputTensor,
+                                                         const ReduceOptions& opts,
+                                                         ProcessGroupCCL& pg_ccl);
 };
 
 struct RegisterXPUMethods {
@@ -835,6 +844,113 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_(std::vect
   execute(work);
 
   return work;
+}
+
+// _reduce_oop implements an out-of-place reduce procedure.
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_oop(at::Tensor& outputTensor,
+                                                        at::Tensor& inputTensor,
+                                                        const ReduceOptions& opts,
+                                                        ProcessGroupCCL& pg_ccl) {
+  const int root = opts.rootRank + opts.rootTensor;
+  std::vector<at::Tensor> inputTensors{inputTensor};
+  std::vector<at::Tensor> outputTensors{outputTensor};
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, XPUWorkCCL>(
+    pg_ccl,
+    inputTensors,
+    outputTensors,
+    [=](at::Tensor input,
+        at::Tensor output,
+        ccl::reduce_attr attr,
+        ccl::communicator& comm,
+        ccl::stream& stream) {
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::reduce_oop", std::vector<c10::IValue>{input});
+
+      ccl::event ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
+                                output.data_ptr(),
+                                (size_t) input.numel(),
+                                cclDatatypes.at(input.scalar_type()),
+                                cclOps.at(opts.reduceOp),
+                                root,
+                                comm,
+                                stream));
+      });
+      return ret_evt;
+
+  },
+    c10d::OpType::REDUCE);
+
+  work->debugName = std::string("xpu::_reduce_oop");
+  execute(work);
+
+  return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                        std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                        const ReduceScatterOptions& opts,
+                                                                        ProcessGroupCCL& pg_ccl) {
+  checkSingleTensor(outputTensors);
+  auto outputTensor = outputTensors.back();
+  auto inputTensors_ = inputTensors.back();
+  bool same_size = check_same_size(inputTensors_);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  if (same_size) {
+    auto inputFlattened = newLikeFlat(inputTensors_);
+    for (const auto j : c10::irange(inputTensors_.size())) {
+        inputFlattened[j].copy_(inputTensors_[j], true);
+    }
+    std::vector<at::Tensor> flattendInputTensors{inputFlattened};
+
+    work = collective<get_ccl_comms, XPUWorkCCL>(
+            pg_ccl,
+            flattendInputTensors,
+            outputTensors,
+            [=](at::Tensor input,
+                at::Tensor output,
+                ccl::reduce_attr attr,
+                ccl::communicator& comm,
+                ccl::stream& stream) {
+                RECORD_FUNCTION("oneccl_bindings_for_pytorch::xpu::reduce_scatter", std::vector<c10::IValue>{input});
+
+                ccl::event ret_evt;
+                call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+                CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+                                                        output.data_ptr(),
+                                                        (size_t) output.numel(),
+                                                        cclDatatypes.at(input.scalar_type()),
+                                                        cclOps.at(opts.reduceOp),
+                                                        comm,
+                                                        stream));
+                });
+                return ret_evt;
+
+            },
+            c10d::OpType::REDUCE_SCATTER);
+
+    work->debugName = std::string("xpu::reduce_scatter");
+    execute(work);
+    return work;
+  } else {
+    // Use multiple reduce to simulate reduce_scatter.
+    // Currently one-ccl doest support grouped primitives, we'll add coalescing when it supports.
+    // todo: startCoalescing
+    const auto num_reduces = inputTensors_.size();
+    for (const int i : c10::irange(num_reduces)) {
+      auto& input = inputTensors_[i];
+      auto& output = (i == pg_ccl.getRank()) ? outputTensor : input;
+      auto reduceOpts = ReduceOptions{
+          opts.reduceOp,
+          static_cast<int64_t>(i),
+          static_cast<int64_t>(0),
+          opts.timeout};
+      work = _reduce_oop(output, input, reduceOpts, pg_ccl);
+    }
+    // todo: endCoalescing
+    return work;
+  }
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::_reduce_scatter_base_(at::Tensor& outputTensor,

@@ -138,6 +138,11 @@ protected:
                                                          const ReduceOptions& opts,
                                                          ProcessGroupCCL& pg) override;
 
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                    std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                    const ReduceScatterOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) override;
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_scatter_base_(at::Tensor& outputTensor,
                                                                           at::Tensor& inputTensor,
                                                                           const ReduceScatterOptions& opts,
@@ -193,6 +198,11 @@ private:
   std::deque<c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>> queue_;
   std::condition_variable queueProduceCV_;
   std::condition_variable queueConsumeCV_;
+
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> _reduce_oop(at::Tensor& outputTensor,
+                                                         at::Tensor& inputTensor,
+                                                         const ReduceOptions& opts,
+                                                         ProcessGroupCCL& pg_ccl);
 
 };
 
@@ -384,6 +394,45 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_(std::vecto
           "oneccl_bindings_for_pytorch::cpu_work::reduce");
 
   work->debugName = std::string("cpu::reduce");
+  enqueue(work);
+  return work;
+}
+
+// _reduce_oop implements an out-of-place reduce procedure.
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_reduce_oop(at::Tensor& outputTensor,
+                                                        at::Tensor& inputTensor,
+                                                        const ReduceOptions& opts,
+                                                        ProcessGroupCCL& pg_ccl) {
+  const int root = opts.rootRank + opts.rootTensor;
+  std::vector<at::Tensor> inputTensors{inputTensor};
+  std::vector<at::Tensor> outputTensors{outputTensor};
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  work = collective<get_ccl_comms, CPUWorkCCL>(
+    pg_ccl,
+    inputTensors,
+    outputTensors,
+    [=](at::Tensor input,
+        at::Tensor output,
+        ccl::reduce_attr attr,
+        ccl::communicator& comm) {
+
+      ccl::event ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::reduce(input.data_ptr(),
+                                output.data_ptr(),
+                                (size_t) input.numel(),
+                                cclDatatypes.at(input.scalar_type()),
+                                cclOps.at(opts.reduceOp),
+                                root,
+                                comm));
+      });
+      return ret_evt;
+
+  },
+    c10d::OpType::REDUCE,
+    "oneccl_bindings_for_pytorch::cpu_work::_reduce_oop");
+
+  work->debugName = std::string("cpu::_reduce_oop");
   enqueue(work);
   return work;
 }
@@ -594,6 +643,65 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vecto
   work->debugName = std::string("cpu::gather");
   enqueue(work);
   return work;
+}
+
+c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                const ReduceScatterOptions& opts,
+                                                                ProcessGroupCCL& pg_ccl) {
+  checkSingleTensor(outputTensors);
+  auto outputTensor = outputTensors.back();
+  auto inputTensors_ = inputTensors.back();
+  bool same_size = check_same_size(inputTensors_);
+  c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
+  if (same_size) {
+    auto inputFlattened = newLikeFlat(inputTensors_);
+    for (const auto j : c10::irange(inputTensors_.size())) {
+        inputFlattened[j].copy_(inputTensors_[j], true);
+    }
+    std::vector<at::Tensor> flattendInputTensors{inputFlattened};
+    work = collective<get_ccl_comms, CPUWorkCCL>(
+            pg_ccl,
+            flattendInputTensors,
+            outputTensors,
+            [=](at::Tensor input,
+                at::Tensor output,
+                ccl::reduce_attr attr,
+                ccl::communicator& comm) {
+                
+                ccl::event ret_evt;
+                call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+                CCL_CHECK(ret_evt = ccl::reduce_scatter(input.data_ptr(),
+                                                        output.data_ptr(),
+                                                        (size_t) output.numel(),
+                                                        cclDatatypes.at(input.scalar_type()),
+                                                        cclOps.at(opts.reduceOp),
+                                                        comm));
+                });
+                return ret_evt;
+
+            },
+            c10d::OpType::REDUCE_SCATTER,
+            "oneccl_bindings_for_pytorch::cpu_work::reduce_scatter");
+    work->debugName = std::string("cpu::reduce_scatter");
+    enqueue(work);
+    return work;
+
+  } else {
+    // Use multiple reduce to simulate reduce_scatter.
+    const auto num_reduces = inputTensors_.size();
+    for (const int i : c10::irange(num_reduces)) {
+      auto& input = inputTensors_[i];
+      auto& output = (i == pg_ccl.getRank()) ? outputTensor : input;
+      auto reduceOpts = ReduceOptions{
+          opts.reduceOp,
+          static_cast<int64_t>(i),
+          static_cast<int64_t>(0),
+          opts.timeout};
+      work = _reduce_oop(output, input, reduceOpts, pg_ccl);
+    }
+    return work;
+  }
 }
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::scatter_(std::vector<at::Tensor>& outputTensors,

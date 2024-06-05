@@ -88,6 +88,64 @@ std::vector<at::Device> get_device_list(const std::vector<std::vector<at::Tensor
   return res;
 }
 
+bool check_same_size(const std::vector<at::Tensor>& tensors) {
+  for (const auto& tensor : tensors) {
+    if (!tensors[0].is_same_size(tensor)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::vector<at::Tensor> flatten_tensor_lists(std::vector<std::vector<at::Tensor>>& tensor_lists, std::vector<at::Tensor>& other, size_t world_size) {
+  if (tensor_lists.size() != other.size()) {
+    TORCH_CHECK(
+        false,
+        "Tensor list operands to scatter/gather must have the same length");
+  }
+  const auto num_devices = tensor_lists.size();
+
+  std::vector<at::Tensor> flattened;
+  flattened.resize(num_devices);
+
+  for (const auto i : c10::irange(size_t{}, num_devices)) {
+    if (tensor_lists[i].size() != world_size * num_devices) {
+      TORCH_CHECK(
+          false,
+          c10::str(
+              "Tensor list input to scatter/gather must match number of collective participants ",
+              "but got ",
+              tensor_lists[i].size(),
+              " inputs",
+              " with world_size ",
+              world_size,
+              " and ",
+              num_devices,
+              " devices."));
+    }
+
+    // Only check device match for the first tensor in the list; the call to
+    // newLikeFlat() below will check the rest.
+    if (tensor_lists[i].front().get_device() != other[i].get_device()) {
+      TORCH_CHECK(
+          false,
+          "Corresponding input/output tensors to scatter/gather must all reside"
+          " on the same device");
+    }
+
+    for (const auto& t : tensor_lists[i]) {
+      if (t.numel() != other[i].numel()) {
+        TORCH_CHECK(
+            false,
+            "All tensor operands to scatter/gather must have the same number of elements");
+      }
+    }
+    // Flatten the tensors (from all ranks) into a single big tensor.
+    flattened[i] = c10d::newLikeFlat(tensor_lists, i);
+  }
+  return flattened;
+}
+
 std::string get_key_send_recv(int myRank, int peer) {
   int lowRank = myRank < peer ? myRank : peer;
   int highRank = myRank < peer ? peer : myRank;

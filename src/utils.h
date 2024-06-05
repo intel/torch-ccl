@@ -42,6 +42,7 @@
 #else
 #include <c10d/Types.hpp>
 #endif
+#include <torch/csrc/distributed/c10d/Utils.hpp>
 
 #include <ccl_comm_collector.h>
 #include "ProcessGroupCCL.hpp"
@@ -92,6 +93,18 @@ std::string get_key_send_recv(int myRank, int peer);
 // Get the list of devices from list of tensors
 std::vector<at::Device> get_device_list(const std::vector<at::Tensor>& tensors);
 std::vector<at::Device> get_device_list(const std::vector<std::vector<at::Tensor>>& tensors);
+bool check_same_size(const std::vector<at::Tensor>& tensors);
+
+inline at::Tensor newLikeFlat(std::vector<at::Tensor>& tensors) {
+  if (tensors.empty()) {
+    TORCH_CHECK(false, "Received an empty list");
+  }
+  auto& t = tensors[0];
+  at::DeviceGuard deviceGuard(t.device());
+  std::vector<int64_t> sizes{static_cast<int64_t>(tensors.size())};
+  sizes.insert(sizes.end(), t.sizes().begin(), t.sizes().end());
+  return at::empty(sizes, t.options());
+}
 
 template <typename ccl_fn_type>
 decltype(auto) call_with_lock(std::mutex& lock, ccl_fn_type fn) {

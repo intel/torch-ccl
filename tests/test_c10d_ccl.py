@@ -575,7 +575,94 @@ class ProcessGroupCCLTest(MultiProcessTestCase):
     @skip_if_not_multixpu
     def test_reduce_scatter_base_multi_xpu(self):
         self._test_reduce_scatter_base_ops(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+        
+    def _test_reduce_scatter_ops(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def reduce_scatter(outputs, input_lists, op):
+            opts = c10d.ReduceScatterOptions()
+            opts.reduceOp = op
+            work = pg.reduce_scatter(outputs, input_lists, opts)
+            work.wait()
+        
+        output = [fn(torch.tensor([0]))]
+        #  rank/input_list
+        #   0         [1], [2], [3], [4]
+        #   1         [2], [3], [4], [5]
+        #   2         [3], [4], [5], [6]
+        #   3         [4], [5], [6], [7]
+        input_per_rank = []
+        for i in range(self.world_size):
+            input_per_rank.append(torch.tensor([self.rank + i + 1]))
+        
+        tensor_lists = [[fn(t) for t in input_per_rank]]
+        
+        reduce_scatter(output, tensor_lists, c10d.ReduceOp.SUM)
+        
+        
+        expected = torch.tensor(
+            [
+                (1 + self.world_size) * self.world_size // 2
+                + self.world_size * self.rank
+            ])
+        
+        self.assertEqual(expected, output[0])
+
+    def test_reduce_scatter(self):
+        self._test_reduce_scatter_ops(lambda t: t.clone())
+
+    @skip_if_no_xpu
+    def test_reduce_scatter_xpu(self):
+        self._test_reduce_scatter_ops(lambda t: t.clone().xpu())
+            
+    @skip_if_not_multixpu
+    def test_reduce_scatter_multi_xpu(self):
+        self._test_reduce_scatter_ops(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+
+    def _test_reduce_scatter_ops_variance_input(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = c10d.ProcessGroupCCL(store, self.rank, self.world_size)
+
+        def reduce_scatter(outputs, input_lists, op):
+            opts = c10d.ReduceScatterOptions()
+            opts.reduceOp = op
+            work = pg.reduce_scatter(outputs, input_lists, opts)
+            work.wait()
+        
+        output = [fn(torch.tensor([0] * (self.rank + 1)))]
+        #  rank/input_list
+        #   0         [1], [2,2], [3,3,3], [4,4,4,4]
+        #   1         [2], [3,3], [4,4,4], [5,5,5,5]
+        #   2         [3], [4,4], [5,5,5], [6,6,6,6]
+        #   3         [4], [5,5], [6,6,6], [7,7,7,7]
+        input_per_rank = []
+        for i in range(self.world_size):
+            input_per_rank.append(torch.tensor([self.rank + i + 1] * (i+1)))
+        
+        tensor_lists = [[fn(t) for t in input_per_rank]]
+        
+        reduce_scatter(output, tensor_lists, c10d.ReduceOp.SUM)
+        
+        expected = torch.tensor(
+            [
+                (1 + self.world_size) * self.world_size // 2
+                + self.world_size * self.rank
+            ] * (self.rank + 1))
+
+        self.assertEqual(expected, output[0])
+
+    def test_reduce_scatter_variance_input(self):
+        self._test_reduce_scatter_ops_variance_input(lambda t: t.clone())
     
+    @skip_if_no_xpu
+    def test_reduce_scatter_variance_input_xpu(self):
+        self._test_reduce_scatter_ops_variance_input(lambda t: t.clone().xpu())
+    
+    @skip_if_not_multixpu
+    def test_reduce_scatter_variance_input_multi_xpu(self):
+        self._test_reduce_scatter_ops_variance_input(lambda t: t.clone().xpu("xpu:{}".format(self.rank)))
+
     @skip_if_no_xpu
     def test_coalescing_manager(self):
         store = c10d.FileStore(self.file_name, self.world_size)

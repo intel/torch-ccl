@@ -869,11 +869,17 @@ c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::scatter(
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::reduce_scatter(
-    std::vector<at::Tensor>& /* unused */,
-    std::vector<std::vector<at::Tensor>>& /* unused */,
-    const ReduceScatterOptions& /* unused */)
+    std::vector<at::Tensor>& outputTensors,
+    std::vector<std::vector<at::Tensor>>& inputTensors,
+    const ReduceScatterOptions& opts)
 {
-  TORCH_CHECK(false, "ProcessGroupCCL does not support reduce_scatter");
+  std::vector<c10::IValue> tensor_param;
+  format_tensors_param(tensor_param, inputTensors);
+  format_tensors_param(tensor_param, outputTensors);
+  RECORD_FUNCTION("oneccl_bindings_for_pytorch::reduce_scatter", tensor_param);
+
+  auto work = DispatchStub::reduce_scatter(outputTensors, inputTensors, opts, *this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::_reduce_scatter_base(

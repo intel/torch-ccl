@@ -95,6 +95,10 @@ public:
                                                                   const ReduceScatterOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl);
 
+  static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter(std::vector<at::Tensor>& outputTensors,
+                                                                  std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                  const ReduceScatterOptions& opts,
+                                                                  ProcessGroupCCL& pg_ccl);
   static c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_tensor_coalesced(
                                                                 std::vector<at::Tensor>& outputTensors,
                                                                 std::vector<at::Tensor>& inputTensors,
@@ -185,6 +189,14 @@ public:
                                                                   const ScatterOptions& opts,
                                                                   ProcessGroupCCL& pg_ccl){
     fail(outputTensors[0].device().type(), "scatter");
+    return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
+  }
+
+  virtual c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> reduce_scatter_(std::vector<at::Tensor>& outputTensors,
+                                                                    std::vector<std::vector<at::Tensor>>& inputTensors,
+                                                                    const ReduceScatterOptions& opts,
+                                                                    ProcessGroupCCL& pg_ccl) {
+    fail(outputTensors[0].device().type(), "reduce_scatter");
     return c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL>();
   }
   

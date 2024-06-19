@@ -19,6 +19,9 @@ target_include_directories(oneccl_bindings_for_pytorch PUBLIC ./)
 
 target_link_libraries(oneccl_bindings_for_pytorch PUBLIC ${DEPENDS_LIB})
 
-set_target_properties(oneccl_bindings_for_pytorch PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
+foreach(RPATH ${CMAKE_INSTALL_RPATH})
+    set_target_properties(oneccl_bindings_for_pytorch PROPERTIES LINK_FLAGS "-Wl,-rpath,${RPATH}")
+endforeach()
+set_target_properties(oneccl_bindings_for_pytorch PROPERTIES LINK_FLAGS "-Wl,--disable-new-dtags")
 
 install(TARGETS oneccl_bindings_for_pytorch LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib")

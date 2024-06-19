@@ -11,7 +11,10 @@ target_link_libraries(oneccl_bindings_for_pytorch_xpu PUBLIC ${DEPENDS_LIB})
 target_link_libraries(oneccl_bindings_for_pytorch_xpu PUBLIC oneccl_bindings_for_pytorch)
 target_link_libraries(oneccl_bindings_for_pytorch_xpu PUBLIC intel-ext-pt-gpu)
 
-set_target_properties(oneccl_bindings_for_pytorch_xpu PROPERTIES LINK_FLAGS "-Wl,-rpath,${CMAKE_INSTALL_RPATH}")
+foreach(RPATH ${CMAKE_INSTALL_RPATH})
+    set_target_properties(oneccl_bindings_for_pytorch_xpu PROPERTIES LINK_FLAGS "-Wl,-rpath,${RPATH}")
+endforeach()
+set_target_properties(oneccl_bindings_for_pytorch_xpu PROPERTIES LINK_FLAGS "-Wl,--disable-new-dtags")
 
 install(TARGETS oneccl_bindings_for_pytorch_xpu LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib")
 

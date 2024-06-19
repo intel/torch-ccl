@@ -113,29 +113,29 @@ class BuildCMakeExt(BuildExtension):
             'BUILD_FT': 'OFF'
         }
 
+        compute_backend = os.getenv('COMPUTE_BACKEND', 'n/a')
         runtime = 'gcc'
-        if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
-                runtime = 'dpcpp'
-                build_options['COMPUTE_BACKEND'] = os.environ['COMPUTE_BACKEND']
-                import intel_extension_for_pytorch
-                build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
-                if "DPCPP_GCC_INSTALL_DIR" in my_env:
-                    exist_cflags = "CFLAGS" in my_env
-                    cflags = ""
-                    if exist_cflags:
-                        cflags = my_env["CFLAGS"]
-                    my_env["CFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cflags}"
-                    exist_cxxflags = "CXXFLAGS" in my_env
-                    cxxflags = ""
-                    if exist_cxxflags:
-                        cxxflags = my_env["CXXFLAGS"]
-                    my_env["CXXFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cxxflags}"
-                    exist_ldflags = "LDFLAGS" in my_env
-                    ldflags = ""
-                    if exist_ldflags:
-                        ldflags = my_env["LDFLAGS"]
-                    my_env["LDFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} -fuse-ld=lld -lrt -lpthread {ldflags}"
+        if compute_backend == 'dpcpp':
+            runtime = 'dpcpp'
+            build_options['COMPUTE_BACKEND'] = compute_backend
+            import intel_extension_for_pytorch
+            build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
+            if "DPCPP_GCC_INSTALL_DIR" in my_env:
+                exist_cflags = "CFLAGS" in my_env
+                cflags = ""
+                if exist_cflags:
+                    cflags = my_env["CFLAGS"]
+                my_env["CFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cflags}"
+                exist_cxxflags = "CXXFLAGS" in my_env
+                cxxflags = ""
+                if exist_cxxflags:
+                    cxxflags = my_env["CXXFLAGS"]
+                my_env["CXXFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} {cxxflags}"
+                exist_ldflags = "LDFLAGS" in my_env
+                ldflags = ""
+                if exist_ldflags:
+                    ldflags = my_env["LDFLAGS"]
+                my_env["LDFLAGS"] = f"--gcc-install-dir={my_env['DPCPP_GCC_INSTALL_DIR']} -fuse-ld=lld -lrt -lpthread {ldflags}"
 
         cc, cxx = get_compiler(runtime)
         build_options['CMAKE_C_COMPILER'] = cc
@@ -143,27 +143,25 @@ class BuildCMakeExt(BuildExtension):
 
         extension.generate(build_options, my_env, build_dir, install_dir)
 
-        if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
-                if "DPCPP_GCC_INSTALL_DIR" in my_env:
-                    if exist_cflags:
-                        my_env["CFLAGS"] = cflags
-                    else:
-                        del my_env["CFLAGS"]
-                    if exist_cxxflags:
-                        my_env["CXXFLAGS"] = cxxflags
-                    else:
-                        del my_env["CXXFLAGS"]
-                    if exist_ldflags:
-                        my_env["LDFLAGS"] = ldflags
-                    else:
-                        del my_env["LDFLAGS"]
+        if compute_backend == 'dpcpp':
+            if "DPCPP_GCC_INSTALL_DIR" in my_env:
+                if exist_cflags:
+                    my_env["CFLAGS"] = cflags
+                else:
+                    del my_env["CFLAGS"]
+                if exist_cxxflags:
+                    my_env["CXXFLAGS"] = cxxflags
+                else:
+                    del my_env["CXXFLAGS"]
+                if exist_ldflags:
+                    my_env["LDFLAGS"] = ldflags
+                else:
+                    del my_env["LDFLAGS"]
 
         build_args = ['-j', str(os.cpu_count())]
         check_call(['make', 'oneccl_bindings_for_pytorch'] + build_args, cwd=str(build_dir))
-        if 'COMPUTE_BACKEND' in os.environ:
-            if os.environ['COMPUTE_BACKEND'] == 'dpcpp':
-                check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
+        if compute_backend == 'dpcpp':
+            check_call(['make', 'oneccl_bindings_for_pytorch_xpu'] + build_args, cwd=str(build_dir))
         check_call(['make', 'install'], cwd=str(build_dir))
 
 
@@ -223,7 +221,12 @@ def get_python_c_module():
     ]
 
     def make_relative_rpath(path):
-        return '-Wl,-rpath,$ORIGIN/' + path
+        ret = []
+        ret.append('-Wl,-rpath,$ORIGIN/' + path)
+        if os.getenv('COMPUTE_BACKEND', 'n/a') == 'dpcpp':
+            ret.append('-Wl,-rpath,$ORIGIN/../../../')
+            ret.append('-Wl,--disable-new-dtags')
+        return ret
 
     _c_module = CppExtension("oneccl_bindings_for_pytorch._C",
                              libraries=main_libraries,
@@ -232,7 +235,7 @@ def get_python_c_module():
                              extra_compile_args=main_compile_args + extra_compile_args,
                              include_dirs=include_dirs,
                              library_dirs=library_dirs,
-                             extra_link_args=extra_link_args + main_link_args + [make_relative_rpath('lib')])
+                             extra_link_args=extra_link_args + main_link_args + make_relative_rpath('lib'))
 
     return _c_module
 

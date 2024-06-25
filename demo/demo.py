@@ -37,8 +37,8 @@ if __name__ == "__main__":
         # set the default rank and world size to 0 and 1
         os.environ['RANK'] = str(os.environ.get('RANK', 0))
         os.environ['WORLD_SIZE'] = str(os.environ.get('WORLD_SIZE', 1))
-    os.environ['MASTER_ADDR'] = '127.0.0.1'  # your master address
-    os.environ['MASTER_PORT'] = '29500'  # your master port
+    os.environ['MASTER_ADDR'] = args.dist_url #'127.0.0.1'  # your master address
+    os.environ['MASTER_PORT'] = args.dist_port #'29500'  # your master port
     rank = int(os.environ.get('PMI_RANK', -1)) # global rank
     world_size = int(os.environ.get("WORLD_SIZE", -1))
     init_method = 'tcp://' + args.dist_url + ':' + args.dist_port

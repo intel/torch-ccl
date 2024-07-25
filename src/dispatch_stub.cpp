@@ -554,6 +554,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce(std::v
                                                                        ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
   c10::DeviceType dev_type = tensors[0].device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->allreduce_(tensors, opts, pg_ccl);
 }
 
@@ -562,6 +563,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::allreduce_coales
                                                                        ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
   c10::DeviceType dev_type = tensors[0].device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->allreduce_coalesced_(tensors, opts, pg_ccl);
 }
 
@@ -570,6 +572,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce(std::vect
                                                              ProcessGroupCCL& pg_ccl) {
   checkSameType(tensors[0], tensors);
   c10::DeviceType dev_type = tensors[0].device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->reduce_(tensors, opts, pg_ccl);
 }
 
@@ -638,6 +641,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce_scatter(s
                                                                 const ReduceScatterOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl) {
   c10::DeviceType dev_type = outputTensors[0].device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->reduce_scatter_(outputTensors, inputTensors, opts, pg_ccl);
 }
 
@@ -646,6 +650,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::_reduce_scatter_
                                                                 const ReduceScatterOptions& opts,
                                                                 ProcessGroupCCL& pg_ccl) {
   c10::DeviceType dev_type = inputTensor.device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->_reduce_scatter_base_(outputTensor, inputTensor, opts, pg_ccl);
 }
 
@@ -657,6 +662,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> DispatchStub::reduce_scatter_t
   checkSameType(inputTensors[0], inputTensors);
   checkSameType(outputTensors[0], outputTensors);
   c10::DeviceType dev_type = inputTensors[0].device().type();
+  check_supported_reduce_op(dev_type, opts.reduceOp);
   return get_ccl_stub(dev_type)->reduce_scatter_tensor_coalesced_(outputTensors, inputTensors, opts, pg_ccl);
 }
 

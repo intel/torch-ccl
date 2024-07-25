@@ -290,4 +290,48 @@ private:
   }
 };
 
+} // namespace oneccl_bindings_for_pytorch
+
+namespace {
+
+std::string reduce_op_to_string(c10d::ReduceOp op) {
+  switch (op) {
+    case c10d::ReduceOp::SUM:
+      return "SUM";
+    case c10d::ReduceOp::PRODUCT:
+      return "PRODUCT";
+    case c10d::ReduceOp::MIN:
+      return "MIN";
+    case c10d::ReduceOp::MAX:
+      return "MAX";
+    case c10d::ReduceOp::BAND:
+      return "BAND";
+    case c10d::ReduceOp::BOR:
+      return "BOR";
+    case c10d::ReduceOp::BXOR:
+      return "BXOR";
+    case c10d::ReduceOp::AVG:
+      return "AVG";
+    default:
+      return "UNKNOWN";
+  }
 }
+
+void check_supported_reduce_op(c10::DeviceType dev_type, c10d::ReduceOp op) {
+  if (dev_type == c10::DeviceType::XPU) {
+    switch (op) {
+      case c10d::ReduceOp::BAND:
+      case c10d::ReduceOp::BOR:
+      case c10d::ReduceOp::BXOR:
+      case c10d::ReduceOp::AVG:
+      case c10d::ReduceOp::PREMUL_SUM:
+      case c10d::ReduceOp::UNUSED:
+        TORCH_CHECK(false, ("Cannot use ReduceOp." + reduce_op_to_string(op) + " with XPU"));
+      default:
+        // No action needed for supported operations
+        break;
+    }
+  }
+}
+
+} // namespace

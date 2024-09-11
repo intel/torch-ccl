@@ -80,8 +80,8 @@ public:
         //There are three sync buffers in triple buffer.
         e = queue.submit([&](sycl::handler& cgh) {
             cgh.parallel_for<class copy_kernel2>(
-                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL{
-
+                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL{
+                  int idx = item.get_global_id(0);
                   simd<data_type, SIMD> grf; //4 registers allocated.
                   uint32_t index = idx * SIMD;
 
@@ -95,8 +95,7 @@ public:
                       (ptr + index + buffer_offset_to_sync + size_per_buffer_kernel / sizeof(data_type), grf);
                   lsc_block_store<data_type, SIMD, lsc_data_size::default_size, cache_hint::uncached, cache_hint::uncached>
                       (ptr + index + buffer_offset_to_sync + 2 * size_per_buffer_kernel / sizeof(data_type), grf);
-                  lsc_fence<lsc_memory_kind::untyped_global, lsc_fence_op::none, lsc_scope::system>();
-
+                  fence<memory_kind::global, fence_flush_op::none, fence_scope::system>();
                 });
         });
         e.wait();
@@ -140,8 +139,8 @@ public:
         int buffer_index_kernel = buffer_index; //index to the triple temp buffer
         queue.submit([&](sycl::handler& cgh) {
             cgh.parallel_for<class Allreduce_kernel>(
-                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL {
-                    
+                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL {
+                    int idx = item.get_global_id(0);
                     /////////////////////////////////////////////////////////////////////////////////
                     //ESIMD kernel
                     uint offset = idx * SIMD * UNROLL_SIZE * kernel_inner_loop;
@@ -181,7 +180,7 @@ public:
                                 ((data_type *)local_temp_ptr + offset + unroll_i * SIMD + i * SIMD * UNROLL_SIZE, buffer.template select<SIMD, 1>(unroll_i * SIMD));
                         }
                     }
-                    lsc_fence<lsc_memory_kind::untyped_global, lsc_fence_op::none, lsc_scope::gpus>();
+                    fence<memory_kind::global, fence_flush_op::none, fence_scope::gpus>();
 
                     //since each threads are copying small chunks of data to temp buffer, all the threads needs to sync globally using atomics within this rank
                     simd_mask<SMALL_SIMD_ATOMIC> pred;
@@ -443,8 +442,8 @@ public:
         int buffer_index_kernel = buffer_index; //index to the triple temp buffer
         queue.submit([&](sycl::handler& cgh) {
             cgh.parallel_for<class Workonly_kernel>(
-                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL {
-                    
+                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL {
+                    int idx = item.get_global_id(0);
                     /////////////////////////////////////////////////////////////////////////////////
                     //ESIMD kernel
                     uint offset = idx * SIMD * UNROLL_SIZE * kernel_inner_loop;
@@ -484,7 +483,7 @@ public:
                                 ((data_type *)local_temp_ptr + offset + unroll_i * SIMD + i * SIMD * UNROLL_SIZE, buffer.template select<SIMD, 1>(unroll_i * SIMD));
                         }
                     }
-                    lsc_fence<lsc_memory_kind::untyped_global, lsc_fence_op::none, lsc_scope::gpus>();
+                    fence<memory_kind::global, fence_flush_op::none, fence_scope::gpus>();
 
                     //since each threads are copying small chunks of data to temp buffer, all the threads needs to sync globally using atomics within this rank
                     simd_mask<SMALL_SIMD_ATOMIC> pred;
@@ -732,8 +731,8 @@ public:
         int buffer_index_kernel = buffer_index; //index to the triple temp buffer
         queue.submit([&](sycl::handler& cgh) {
             cgh.parallel_for<class Synconly_kernel>(
-                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL {
-                    
+                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL {
+                    int idx = item.get_global_id(0);
                     /////////////////////////////////////////////////////////////////////////////////
                     //ESIMD kernel
                     uint offset = idx * SIMD * UNROLL_SIZE * kernel_inner_loop;

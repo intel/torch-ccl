@@ -565,9 +565,9 @@ public:
         e = queue.submit([&](sycl::handler& cgh) 
         {
             cgh.parallel_for<class init_kernel>(
-                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                sycl::nd_range<1>({ total_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                 {
-
+                  int idx = item.get_global_id(0);
                   simd<data_type, SIMD_INIT> grf; //4 registers allocated.
                   uint32_t index = idx * SIMD_INIT + data_size_per_buffer_kernel;
 
@@ -580,7 +580,7 @@ public:
                       (ptr, grf);
                   lsc_block_store<data_type, SIMD_INIT, lsc_data_size::default_size, cache_hint::uncached, cache_hint::uncached>
                       (ptr2, grf);
-                  lsc_fence<lsc_memory_kind::untyped_global, lsc_fence_op::none, lsc_scope::system>();
+                  fence<memory_kind::global, fence_flush_op::none, fence_scope::system>();
 
                 });
         });
@@ -676,12 +676,12 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_load_input_to_temp_buffer>(
-                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
 
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
-
+                            int idx = item.get_global_id(0);
                             for (int inner_iter = 0; inner_iter < innerloop_iter_count; inner_iter++)
                             {
                                 int index = idx + inner_iter * HW_THREAD_COUNT;
@@ -731,8 +731,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_rankSync1>(
-                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            // int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             simd<ushort, SIMD_ATOMIC> ramp;
@@ -779,9 +780,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_local_sum_and_distribute_to_remote_ranks>(
-                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
-
+                            int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
 
@@ -834,8 +835,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_rankSync2>(
-                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            // int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             simd<ushort, SIMD_ATOMIC> ramp;
@@ -886,9 +888,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_all_sum>(
-                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
-
+                            int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
 
@@ -941,8 +943,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_rankSync4>(
-                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            // int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             simd<ushort, SIMD_ATOMIC> ramp;
@@ -993,8 +996,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_gather_from_remote_and_dist_to_rank_pair>(
-                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             for (int inner_iter = 0; inner_iter < innerloop_iter_count; inner_iter++)
@@ -1045,8 +1049,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_rankSync5>(
-                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ total_threads_needed_sync }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            // int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             simd<ushort, SIMD_ATOMIC> ramp;
@@ -1098,8 +1103,9 @@ public:
                 e[kernel_index] = queue.submit([&](sycl::handler& cgh)
                 {
                     cgh.parallel_for<class Kernel_write_output>(
-                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::item<1> idx) SYCL_ESIMD_KERNEL
+                        sycl::nd_range<1>({ persist_threads_needed }, wg_size), [=](sycl::nd_item<1> item) SYCL_ESIMD_KERNEL
                         {
+                            int idx = item.get_global_id(0);
                             /////////////////////////////////////////////////////////////////////////////////
                             //ESIMD kernel
                             for (int inner_iter = 0; inner_iter < innerloop_iter_count; inner_iter++)

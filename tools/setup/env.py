@@ -13,8 +13,8 @@ def get_compiler(runtime):
         c_compiler = 'icx'
         cpp_compiler = 'icpx'
     else:
-        c_compiler = 'cc'
-        cpp_compiler = 'c++'
+        c_compiler = os.environ.get('CC', 'cc')
+        cpp_compiler = os.environ.get('CXX', 'c++')
 
     cc = shutil.which(c_compiler)
     cpp = shutil.which(cpp_compiler)

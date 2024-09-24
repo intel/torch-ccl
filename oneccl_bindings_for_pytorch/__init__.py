@@ -22,7 +22,7 @@ if hasattr(torch, 'xpu'):
         import ctypes
         my_c_library = ctypes.cdll.LoadLibrary(os.path.join(cwd, "lib/liboneccl_bindings_for_pytorch_xpu.so"))
     except OSError as e:
-        print(f"Warning: Cannot load xpu CCL. CCL doesn't work for XPU device due to {e}")
+        warnings.warn(f"Warning: Cannot load xpu CCL. CCL doesn't work for XPU device due to {e}")
 
 __all__ = []
 __all__ += [name for name in dir(ccl_lib)

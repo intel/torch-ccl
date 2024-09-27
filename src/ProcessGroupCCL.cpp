@@ -680,11 +680,13 @@ ProcessGroupCCL::ProcessGroupCCL(const c10::intrusive_ptr<Store>& store, int ran
   torch_llm_allreduce_ = parseTorchCCLEnvVarFlag(TORCH_LLM_ALLREDUCE, torch_llm_allreduce_);
   // Hide CCL_SKIP_SCHEDULER/CCL_ENABLE_SYCL_KERNELS/CCL_SYCL_ESIMD by TORCH_LLM_ALLREDUCE
   if (torch_llm_allreduce_) {
+#if CCL_MINOR_VERSION < 14
       setOneCCLEnvVar("CCL_SKIP_SCHEDULER", 1); // for basekit 2024.1
       setOneCCLEnvVar("CCL_ENABLE_SYCL_KERNELS", 1); // for basekit 2024.2
       setOneCCLEnvVar("CCL_SYCL_ESIMD", 1); // for basekit 2024.2
-      useSameStream_ = true;
       blockingWait_ = false;
+#endif
+      useSameStream_ = true;
   }
   useSameStream_ = parseTorchCCLEnvVarFlag(CCL_SAME_STREAM, useSameStream_);
   blockingWait_ = parseTorchCCLEnvVarFlag(CCL_BLOCKING_WAIT, blockingWait_);

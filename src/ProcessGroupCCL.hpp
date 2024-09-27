@@ -130,7 +130,11 @@ public:
   public:
     std::string debugName;
     // Clone of blockingWait_ from ProcessGroupCCL.
+  #if CCL_MINOR_VERSION < 14
     bool blockingWait_ = true;
+  #else
+    bool blockingWait_ = false;
+  #endif
     // Clone of useSameStream_ from ProcessGroupCCL.
     bool useSameStream_ = false;
 

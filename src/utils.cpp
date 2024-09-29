@@ -216,7 +216,7 @@ bool computeLengthsAndCheckAndGetFlat(
 
 void checkSingleTensorHelper(const at::Tensor& tensor)
 {
-  TORCH_CHECK(tensor.is_sparse() || tensor.is_contiguous(), "input dense tensor has to be contiguous");
+  TORCH_CHECK(tensor.is_sparse() || tensor.is_contiguous(tensor.suggest_memory_format()), "input dense tensor has to be contiguous");
   TORCH_CHECK(!tensor.is_cuda(), "CUDA tensor detected and CCL doesn't support CUDA buffers");
   TORCH_CHECK(tensor.numel() >= 0, "input tensor numel should be non-negative");
 }

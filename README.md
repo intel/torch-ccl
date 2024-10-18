@@ -36,7 +36,8 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
-   | [v2.3.0](https://github.com/pytorch/pytorch/tree/v2.4.0)        |  [ccl_torch2.3.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.4.0%2Bcpu)   |
+   | [v2.5.0](https://github.com/pytorch/pytorch/tree/v2.5.0)        |  [ccl_torch2.3.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.5.0%2Bcpu)   |
+   | [v2.4.0](https://github.com/pytorch/pytorch/tree/v2.4.0)        |  [ccl_torch2.4.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.4.0%2Bcpu)   |
    | [v2.3.0](https://github.com/pytorch/pytorch/tree/v2.3.0)        |  [ccl_torch2.3.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.3.0%2Bcpu)   |
    | [v2.2.0](https://github.com/pytorch/pytorch/tree/v2.2.0)        |  [ccl_torch2.2.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.2.0%2Bcpu)   |
    | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.0%2Bcpu)   |
@@ -52,7 +53,7 @@ We recommend using Anaconda as Python package management system. The followings 
 
 - Python 3.8 or later and a C++17 compiler
 
-- PyTorch v2.4.0
+- PyTorch v2.5.0
 
 ## Build Option List
 
@@ -106,6 +107,7 @@ Wheel files are avaiable for the following Python versions.
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: |
+| 2.5.0             |            |            | √          | √          | √           | √           |
 | 2.4.0             |            |            | √          | √          | √           | √           |
 | 2.3.0             |            |            | √          | √          | √           | √           |
 | 2.2.0             |            |            | √          | √          | √           | √           |
@@ -118,7 +120,7 @@ Wheel files are avaiable for the following Python versions.
 | 1.10.0            | √          | √          | √          | √          |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==2.4.0 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
+python -m pip install oneccl_bind_pt==2.5.0 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
 ```
 
 ### Runtime Dynamic Linking

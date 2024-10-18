@@ -36,7 +36,7 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
-   | [v2.5.0](https://github.com/pytorch/pytorch/tree/v2.5.0)        |  [ccl_torch2.3.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.5.0%2Bcpu)   |
+   | [v2.5.0](https://github.com/pytorch/pytorch/tree/v2.5.0)        |  [ccl_torch2.5.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.5.0%2Bcpu)   |
    | [v2.4.0](https://github.com/pytorch/pytorch/tree/v2.4.0)        |  [ccl_torch2.4.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.4.0%2Bcpu)   |
    | [v2.3.0](https://github.com/pytorch/pytorch/tree/v2.3.0)        |  [ccl_torch2.3.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.3.0%2Bcpu)   |
    | [v2.2.0](https://github.com/pytorch/pytorch/tree/v2.2.0)        |  [ccl_torch2.2.0+cpu](https://github.com/intel/torch-ccl/tree/ccl_torch2.2.0%2Bcpu)   |

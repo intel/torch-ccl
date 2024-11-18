@@ -509,6 +509,7 @@ using oneccl_bindings_for_pytorch::DispatchStub;
 using oneccl_bindings_for_pytorch::call_with_lock;
 using oneccl_bindings_for_pytorch::format_tensors_param;
 
+thread_local uint64_t ProcessGroupCCL::cclActiveGroupCounter_ = 0;
 namespace {
 
 static std::once_flag cclInitOnceFlag;
@@ -728,18 +729,29 @@ ProcessGroupCCL::~ProcessGroupCCL()
 {
 }
 
+void ProcessGroupCCL::groupStart() {
+  // todo: wait 2021.14 availible
+  // ccl::group_start();
+  ++cclActiveGroupCounter_;
+}
+
+void ProcessGroupCCL::groupEnd() {
+  // todo: wait 2021.14 availible
+  // ccl::group_end();
+  --cclActiveGroupCounter_;
+}
+
 void ProcessGroupCCL::startCoalescing() {
-    // TODO: GroupStart
-    // Currently oneccl dost not support group execution like NCCL, just mark here.
-    coalescedDevices_.clear();
-    is_coalescing_ = true;
+  groupStart();
+  coalescedDevices_.clear();
+  is_coalescing_ = true;
 }
 
 c10::intrusive_ptr<Work> ProcessGroupCCL::endCoalescing() {
-    // TODO: GroupEnd
-    is_coalescing_ = false;
-    auto work = DispatchStub::end_coalescing(*this);
-    return work;
+  groupEnd();
+  is_coalescing_ = false;
+  auto work = DispatchStub::end_coalescing(*this);
+  return work;
 }
 
 c10::intrusive_ptr<C10D_Work> ProcessGroupCCL::broadcast(

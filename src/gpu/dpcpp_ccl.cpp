@@ -281,7 +281,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
      }
   }
 
-  bool batchP2P = true; // treat like collective
+  bool batchP2P = pg_ccl.cclActiveGroupCounter_ > 0;
   bool singleP2POp = c10d::isP2POp(op_type, batchP2P);
 
   ccl::vector_class<ccl::pair_class<int, ccl::device>> devs_rank;
@@ -301,6 +301,11 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   }
   // Create the stream and rank dev mapping
 
+  // for (const auto i : c10::irange(pg_ccl.cclActiveGroupCounter_)) {
+  //   (void)i;
+  //   // comms have not been initiated yet, so can only check in blocking-way
+  //   ccl::group_end();
+  // }
   // GPU world size and GPU local rank
   // Only support the symmetric distributed communication
   int total_rank_size, local_base_rank;
@@ -345,16 +350,22 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg_ccl, const std::string& devices_k
   c10::Stream dpcpp_stream = impl.getStream(devices[0]);
   auto q = get_sycl_queue(dpcpp_stream);
   auto ctx = ccl::create_context(q.get_context());
-
   // Create ccl::communicators
-  auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, pg_ccl.ccl_member_->get_kvs(pg_ccl.getRank(), *pg_ccl.store_));
+  int init_rank = pg_ccl.getRank();
+  if(singleP2POp) init_rank = p2pRank;
+  auto dpcpp_comms = ccl::create_communicators(total_rank_size, devs_rank, ctx, 
+    pg_ccl.ccl_member_->get_kvs(init_rank, *pg_ccl.store_, singleP2POp, devices_key, p2pRank));
 
   // Initialize allreducer only if use_llm_allreduce is set to nonzero.
   if (use_llm_allreduce != 0){
     std::call_once(allreducer_initialize_flag, init_llm_allreducer, pg_ccl, devices);
     std::cout << "Allreduce goes to LLM path." << std::endl;
   }
-  
+
+  // for (const auto i : c10::irange(pg_ccl.cclActiveGroupCounter_)) {
+  //   (void)i;
+  //   ccl::group_start();
+  // }
   // Store the comms to cache
   std::shared_ptr<Comms> dpcpp_comms_ptr = std::make_shared<Comms>(dpcpp_comms, ccl_streams, torch_streams);
 
@@ -936,7 +947,9 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_scatter_(s
   } else {
     // Use multiple reduce to simulate reduce_scatter.
     // Currently one-ccl doest support grouped primitives, we'll add coalescing when it supports.
-    // todo: startCoalescing
+    // todo: After oneCCL support non-p2p op
+    // std::vector<c10::intrusive_ptr<Work>> works;
+    // pg_ccl.startCoalescing();
     const auto num_reduces = inputTensors_.size();
     for (const int i : c10::irange(num_reduces)) {
       auto& input = inputTensors_[i];
@@ -947,9 +960,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::reduce_scatter_(s
           static_cast<int64_t>(0),
           opts.timeout};
       work = _reduce_oop(output, input, reduceOpts, pg_ccl);
+      // works.push_back(work);
     }
-    // todo: endCoalescing
     return work;
+    // todo: After oneCCL support non-p2p op
+    // auto work = pg_ccl.endCoalescing();
+    // return c10::static_intrusive_pointer_cast<ProcessGroupCCL::AsyncWorkCCL>(work);
   }
 }
 
@@ -1538,10 +1554,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::send_(std::vector
                                                                        int /* unused */,
                                                                        ProcessGroupCCL& pg_ccl) {
 
-  if (pg_ccl.ccl_member_->ccl_comms.size() == 0) {
-    throw std::runtime_error("Point-to-point communication as the first call is not supported now, please make sure all communicators have been initilized. e.g. you could add collective call in front of dist.send/recv call to avoid this error.");
-  }
-
   checkGPUTensor(tensors);
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = pointToPoint<get_ccl_comms, XPUP2PAsyncWork>(
@@ -1580,10 +1592,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> XPUCCLStubs::recv_(std::vector
                                                                        int srcRank,
                                                                        int /* unused */,
                                                                        ProcessGroupCCL& pg_ccl) {
-
-  if (pg_ccl.ccl_member_->ccl_comms.size() == 0) {
-    throw std::runtime_error("Point-to-point communication as the first call is not supported now, please make sure all communicators have been initilized. e.g. you could add collective call in front of dist.send/recv call to avoid this error.");
-  }
 
   checkGPUTensor(tensors);
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;

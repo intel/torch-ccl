@@ -730,7 +730,7 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> pointToPoint(
   bool isSendRecvSelf = false;
 
   int rank_ = pg_ccl.getRank();
-  bool batchP2P = true;
+  bool batchP2P = pg_ccl.cclActiveGroupCounter_ > 0;
 
   if (batchP2P) {
     // Because sub-group processes is not supported now, we treat p2p like collective and put into batchp2p
@@ -750,10 +750,12 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> pointToPoint(
   }
 
   auto& comms = get_ccl_fn(pg_ccl, key, devices, op_type, p2pRank, isSendRecvSelf);
-  
+  if (pg_ccl.is_coalescing_) {
+    pg_ccl.coalescedDevices_.push_back(devices[0]);
+  }
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
 
-  work = make_work_p2p<WorkP2P>(inputs, outputs, peer, fun, comms, attr, pg_ccl.timeout, pg_ccl.getRank(), op_type, prof_title);
+  work = make_work_p2p<WorkP2P>(inputs, outputs, p2pTargetRank, fun, comms, attr, pg_ccl.timeout, pg_ccl.getRank(), op_type, prof_title);
 
   return work;
 }

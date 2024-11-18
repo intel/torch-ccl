@@ -101,6 +101,8 @@ constexpr const char* CCL_SAME_STREAM = "CCL_SAME_STREAM";
 
 constexpr const char* TORCH_LLM_ALLREDUCE = "TORCH_LLM_ALLREDUCE";
 
+// inline constexpr CoalActive = 0x01, CoalColl = 0x02, CoalP2P = 0x04;
+
 #if TORCH_VERSION_MAJOR > 1
 using Baseclass = Backend;
 #else
@@ -252,6 +254,10 @@ public:
   c10::intrusive_ptr<C10D_Work> barrier(
       const BarrierOptions& opts = BarrierOptions()) override;
 
+  void groupStart();
+
+  void groupEnd();
+
   // create a new ProcessGroupCCL and initialize CCL if not initialized
   #if TORCH_VERSION_MAJOR > 1
   static c10::intrusive_ptr<Backend> createProcessGroupCCL(
@@ -292,6 +298,11 @@ public:
 
   // Stores device indexes for all collectives run inside a coalescing block
   std::vector<at::Device> coalescedDevices_;
+
+  // The number of active groupStart() calls. This counter will be increased
+  // by 1 when groupStart() is called and decreased by 1 when group_end()
+  // is called.
+  static thread_local uint64_t cclActiveGroupCounter_;
 };
 
 } // namespace c10d

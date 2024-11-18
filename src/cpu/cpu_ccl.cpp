@@ -79,7 +79,7 @@ Comms& get_ccl_comms(c10d::ProcessGroupCCL& pg, const std::string& devices_key, 
   }
 
   ccl::vector_class<ccl::communicator> cpu_comms;
-  auto kvs = pg.ccl_member_->get_kvs(pg.getRank(), *pg.store_);
+  auto kvs = pg.ccl_member_->get_kvs(pg.getRank(), *pg.store_, false, "", 0);
   cpu_comms.emplace_back(
     call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
       CCL_CHECK(return ccl::create_communicator(pg.getSize(), pg.getRank(), kvs););

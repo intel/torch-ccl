@@ -82,14 +82,14 @@ struct CCLCommCollector {
 
   CCLCommCollector() : kvs(nullptr) {};
 
-  ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store);
+  ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store,
+    bool singleP2POp, const std::string& p2pKey, int p2pRank);
 
   std::shared_ptr<oneccl_bindings_for_pytorch::Comms> get_comms(const std::string& devices_key);
   void add_comms(const std::string& devices_key, std::shared_ptr<oneccl_bindings_for_pytorch::Comms> comms);
 
   // ccl kvs to identify the community.
   ccl::shared_ptr_class<ccl::kvs> kvs;
-
   // Collects the ccl communicator that the process group has used.
   // The key is a list of devices that an operation is operating on
   // The devices are stored in a device sequence and the cache CCL

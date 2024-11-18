@@ -7,15 +7,18 @@
 
 namespace oneccl_bindings_for_pytorch {
 
-ccl::shared_ptr_class<ccl::kvs> CCLCommCollector::get_kvs(int rank, c10d::Store& store) {
-  if (kvs)
-    return kvs;
-  // Each process group is with different store, so we use the unique key for
-  // broadcast the bootstrap network information.
-  std::string storeKey = "ccl_kvs";
+ccl::shared_ptr_class<ccl::kvs> CCLCommCollector::get_kvs(int rank, c10d::Store& store,
+  bool singleP2POp = false, const std::string& p2pKey = "", int p2pRank = 0) {
+  
+  std::string storeKey;
 
+  if (!singleP2POp) {
+    storeKey = std::to_string(ccl_comms.size());
+  } else {
+    storeKey = p2pKey;
+  }
   // Rank 0 broadcast the bootstrap network information to other ranks
-  if (rank == 0) {
+  if (rank == 0 || (singleP2POp && p2pRank == 0)) {
     call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
         kvs = ccl::create_main_kvs();
     });

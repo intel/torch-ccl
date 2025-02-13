@@ -285,7 +285,11 @@ public:
 
   // Whether or not wait() and synchronize() are blocking operations that wait
   // for the operation to complete.
+#if CCL_MINOR_VERSION < 14
   bool blockingWait_ = true;
+#else
+  bool blockingWait_ = false;
+#endif
 
   // Environment variable which controls whether to keep same stream
   // for collectives and compute

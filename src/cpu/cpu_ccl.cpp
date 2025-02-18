@@ -590,57 +590,36 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::_allgather_base_(a
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_into_tensor_coalesced_(std::vector<at::Tensor>& outputTensors,
                                                                       std::vector<at::Tensor>& inputTensors,
                                                                       const AllgatherOptions& opts,
-                                                                      ProcessGroupCCL& pg) {
+                                                                      ProcessGroupCCL& pg_ccl) {
+  const int world_size = pg_ccl.getSize();
+
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
-  int size = pg.getSize();
   work = collective<get_ccl_comms, CPUWorkCCL>(
-    pg,
+    pg_ccl,
     inputTensors,
     outputTensors,
     [=](at::Tensor input,
-        const std::vector<at::Tensor>& outputs,
+        at::Tensor output,
         ccl::allgatherv_attr attr,
         ccl::communicator& comm) {
-        ccl::event ret_evt;
-        std::vector<size_t> recvCounts(size, 0);
 
-        auto flatRes = computeLengthsAndCheckFlat(outputs, recvCounts);
+        RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::allgather_into_tensor_coalesced", std::vector<c10::IValue>({input}));
 
-        if (flatRes.isFlat) {
-          void* recvBuf = flatRes.firstTensor.data_ptr();
+        std::vector<size_t> recvCounts(world_size, input.numel());
 
-          call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
               CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
                                                   (size_t) input.numel(),
-                                                  recvBuf,
+                                                  output.data_ptr(),
                                                   recvCounts,
                                                   cclDatatypes.at(input.scalar_type()),
                                                   comm,
-                                                  attr););
-          });
-        }
-        else {
-          std::vector<void*> recvBufs;
-          std::transform(outputs.begin(), outputs.end(),
-                         std::back_inserter(recvBufs),
-                         [](const at::Tensor& t) { return t.data_ptr(); } );
-
-          call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&](){
-              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
-                                                  (size_t) input.numel(),
-                                                  recvBufs,
-                                                  recvCounts,
-                                                  cclDatatypes.at(input.scalar_type()),
-                                                  comm,
-                                                  attr););
-
-          });
-        }
-
-        return ret_evt;
+                                                  attr));
+            });
+            return ret_evt;
     },
-    c10d::OpType::ALLGATHER,
-    "oneccl_bindings_for_pytorch::cpu_work::allgather_into_tensor_coalesced_");
+    c10d::OpType::COALESCED);
 
   work->debugName = std::string("cpu::allgather_into_tensor_coalesced");
   enqueue(work);

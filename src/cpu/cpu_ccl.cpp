@@ -595,32 +595,30 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_into_ten
 
   c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> work;
   work = collective<get_ccl_comms, CPUWorkCCL>(
-    pg_ccl,
-    inputTensors,
-    outputTensors,
-    [=](at::Tensor input,
-        at::Tensor output,
-        ccl::allgatherv_attr attr,
-        ccl::communicator& comm) {
+          pg_ccl,
+          inputTensors,
+          outputTensors,
+          [=](at::Tensor input,
+              at::Tensor output,
+              ccl::allgatherv_attr attr,
+              ccl::communicator& comm) {
+            RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::allgather_into_tensor_coalesced", std::vector<c10::IValue>({input}));
 
-      RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::allgather_into_tensor_coalesced", std::vector<c10::IValue>({input}));
+            std::vector<size_t> recvCounts(world_size, input.numel());
 
-      std::vector<size_t> recvCounts(world_size, input.numel());
-
-      ccl::event ret_evt;
-      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
-                                            (size_t) input.numel(),
-                                            output.data_ptr(),
-                                            recvCounts,
-                                            cclDatatypes.at(input.scalar_type()),
-                                            comm,
-                                            attr));
-      });
-      return ret_evt;
-    },
-    c10d::OpType::COALESCED);
-
+            ccl::event ret_evt;
+            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                                  (size_t) input.numel(),
+                                                  output.data_ptr(),
+                                                  recvCounts,
+                                                  cclDatatypes.at(input.scalar_type()),
+                                                  comm,
+                                                  attr));
+            });
+            return ret_evt;
+          },
+          c10d::OpType::COALESCED);
   work->debugName = std::string("cpu::allgather_into_tensor_coalesced");
   enqueue(work);
   return work;

@@ -603,21 +603,21 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_into_ten
         ccl::allgatherv_attr attr,
         ccl::communicator& comm) {
 
-        RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::allgather_into_tensor_coalesced", std::vector<c10::IValue>({input}));
+      RECORD_FUNCTION("oneccl_bindings_for_pytorch::cpu::allgather_into_tensor_coalesced", std::vector<c10::IValue>({input}));
 
-        std::vector<size_t> recvCounts(world_size, input.numel());
+      std::vector<size_t> recvCounts(world_size, input.numel());
 
-            ccl::event ret_evt;
-            call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
-              CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
-                                                  (size_t) input.numel(),
-                                                  output.data_ptr(),
-                                                  recvCounts,
-                                                  cclDatatypes.at(input.scalar_type()),
-                                                  comm,
-                                                  attr));
-            });
-            return ret_evt;
+      ccl::event ret_evt;
+      call_with_lock(c10d::ProcessGroupCCL::globalMutex, [&]() {
+        CCL_CHECK(ret_evt = ccl::allgatherv(input.data_ptr(),
+                                            (size_t) input.numel(),
+                                            output.data_ptr(),
+                                            recvCounts,
+                                            cclDatatypes.at(input.scalar_type()),
+                                            comm,
+                                            attr));
+      });
+      return ret_evt;
     },
     c10d::OpType::COALESCED);
 
@@ -625,7 +625,6 @@ c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::allgather_into_ten
   enqueue(work);
   return work;
 }
-
 
 c10::intrusive_ptr<ProcessGroupCCL::AsyncWorkCCL> VanillaCPU::gather_(std::vector<std::vector<at::Tensor>>& outputTensors,
                                                                       std::vector<at::Tensor>& inputTensors,

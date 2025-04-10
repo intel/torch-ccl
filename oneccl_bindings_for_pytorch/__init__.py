@@ -16,7 +16,7 @@ def set_env_default(env, key, value):
 from .version import __version__, git_version
 from . import _C as ccl_lib
 
-if hasattr(torch, 'xpu'):
+if hasattr(torch, 'xpu') and torch.xpu._is_compiled():
     try:
         # load the CCL/XPU library
         import ctypes

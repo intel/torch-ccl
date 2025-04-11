@@ -36,7 +36,8 @@ We recommend using Anaconda as Python package management system. The followings 
    | `torch`                                                         | `oneccl_bindings_for_pytorch`                                             |
    | :-------------------------------------------------------------: | :-----------------------------------------------------------------------: |
    | `master`                                                        |  `master`                                                                 |
-   | [v2.6.0](https://github.com/pytorch/pytorch/tree/v2.6.0)        |  [ccl_torch2.5.0](https://github.com/intel/torch-ccl/tree/ccl_torch2.6.0+xpu)   |
+   | [v2.7.0](https://github.com/pytorch/pytorch/tree/v2.7.0)        |  [ccl_torch2.7.0](https://github.com/intel/torch-ccl/tree/ccl_torch2.7.0+xpu)   |
+   | [v2.6.0](https://github.com/pytorch/pytorch/tree/v2.6.0)        |  [ccl_torch2.6.0](https://github.com/intel/torch-ccl/tree/ccl_torch2.6.0+xpu)   |
    | [v2.5.0](https://github.com/pytorch/pytorch/tree/v2.5.0)        |  [ccl_torch2.5.0](https://github.com/intel/torch-ccl/tree/ccl_torch2.5.0+xpu)   |
    | [v2.3.1](https://github.com/pytorch/pytorch/tree/v2.3.1)        |  [ccl_torch2.3.100](https://github.com/intel/torch-ccl/tree/ccl_torch2.3.100+xpu)   |
    | [v2.1.0](https://github.com/pytorch/pytorch/tree/v2.1.0)        |  [ccl_torch2.1.400](https://github.com/intel/torch-ccl/tree/ccl_torch2.1.400+xpu)   |
@@ -61,7 +62,7 @@ The usage details can be found in the README of corresponding branch.
 
 - Python 3.8 or later and a C++17 compiler
 
-- PyTorch v2.6.0
+- PyTorch v2.7.0
 
 ## Build Option List
 
@@ -95,7 +96,7 @@ The following launch options are supported in Intel® oneCCL Bindings for PyTorc
 
    ```bash
    git clone https://github.com/intel/torch-ccl.git && cd torch-ccl
-   git checkout ccl_torch2.6.0+xpu
+   git checkout ccl_torch2.7.0+xpu
    git submodule sync
    git submodule update --init --recursive
    ```
@@ -119,6 +120,7 @@ Wheel files are available for the following Python versions. Please always use t
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 | Python 3.12 | Python 3.13 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: | :---------: | :---------: | :---------: |
+| 2.7.0             |            |            |            | √          | √           | √           | √           | √           |
 | 2.6.0             |            |            |            | √          | √           | √           | √           | √           |
 | 2.5.1             |            |            |            | √          | √           | √           | √           |             |
 | 2.3.100           |            |            | √          | √          | √           | √           |             |             |
@@ -134,7 +136,7 @@ Wheel files are available for the following Python versions. Please always use t
 | 1.10.0            | √          | √          | √          | √          |             |             |             |             |
 
 ```bash
-python -m pip install oneccl_bind_pt==2.6.0 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+python -m pip install oneccl_bind_pt==2.7.0 --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
 ```
 
 **Note:** Please set proxy or update URL address to https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/ if you meet connection issue.

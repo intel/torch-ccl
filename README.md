@@ -164,7 +164,7 @@ source $(python -c "import oneccl_bindings_for_pytorch as torch_ccl;print(torch_
 
 ## Usage
 
-**Note:** Please `import torch` and `import intel_extension_for_pytorch`, prior to `import oneccl_bindings_for_pytorch`.
+**Note:** Please `import torch`, prior to `import oneccl_bindings_for_pytorch`.
 
 example.py
 

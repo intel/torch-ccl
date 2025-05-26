@@ -32,7 +32,6 @@
 #include <ATen/record_function.h>
 #include <ProcessGroupCCL.hpp>
 #include <dispatch_stub.h>
-#include <ipex.h>
 
 #include <sycl/sycl.hpp>
 //#include "allreduce.h"

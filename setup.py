@@ -118,8 +118,6 @@ class BuildCMakeExt(BuildExtension):
         if compute_backend == 'dpcpp':
             runtime = 'dpcpp'
             build_options['COMPUTE_BACKEND'] = compute_backend
-            import intel_extension_for_pytorch
-            build_options['CMAKE_PREFIX_PATH'] += ";" + intel_extension_for_pytorch.cmake_prefix_path
             if "DPCPP_GCC_INSTALL_DIR" in my_env:
                 exist_cflags = "CFLAGS" in my_env
                 cflags = ""

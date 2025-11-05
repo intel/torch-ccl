@@ -1,3 +1,8 @@
+
+**NOTE**: This repo has been **DEPRECATED**. Please use [PyTorch*](https://github.com/pytorch/pytorch) directly for distributed scenarios. We remain committed to providing robust support and high performance through PyTorch* for Intel® CPU and GPU platforms.
+
+========================================================================================
+
 # Intel® oneCCL Bindings for PyTorch (formerly known as torch_ccl)
 
 This repository holds PyTorch bindings maintained by Intel® for the Intel® oneAPI Collective Communications Library (oneCCL).
